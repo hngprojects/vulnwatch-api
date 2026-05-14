@@ -82,11 +82,6 @@ jobs:
           task-definition: task-def-api.json
           container-name: vulnwatch-api
           image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:api-dev-${{ github.sha }}
-          environment-variables: |
-            ConnectionStrings__DefaultConnection=${{ secrets.DEV_DB_CONNECTION_STRING }}
-            Redis__Configuration=${{ secrets.DEV_REDIS_CONNECTION_STRING }}
-            Jwt__SecretKey=${{ secrets.JWT_SECRET_KEY }}
-            ASPNETCORE_ENVIRONMENT=Production
 
       - name: Deploy API to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
