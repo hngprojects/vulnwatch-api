@@ -7,6 +7,7 @@ public class Scan : EntityBase
     public Guid UserId { get; private set; }
     public Guid IdempotencyKey { get; private set; }
     public ScanTargetType TargetType { get; private set; }
+    public ScanCoverage Coverage { get; private set; }
     public Guid? DomainId { get; private set; }
     public Guid? RepositoryId { get; private set; }
     public ScanStatus Status { get; private set; }
@@ -21,12 +22,13 @@ public class Scan : EntityBase
 
     private Scan() { }
 
-    public static Scan Create(Guid userId, Guid idempotencyKey, ScanTargetType targetType, Guid? domainId = null, Guid? repositoryId = null)
+    public static Scan Create(Guid userId, Guid idempotencyKey, ScanTargetType targetType, ScanCoverage coverage, Guid? domainId = null, Guid? repositoryId = null)
         => new()
         {
             UserId = userId,
             IdempotencyKey = idempotencyKey,
             TargetType = targetType,
+            Coverage = coverage,
             DomainId = domainId,
             RepositoryId = repositoryId,
             Status = ScanStatus.Queued,

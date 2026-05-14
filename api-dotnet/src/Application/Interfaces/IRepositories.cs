@@ -1,7 +1,3 @@
-
-
-
-
 using Application.Features.Domain;
 using Domain.Entities;
 
@@ -23,11 +19,20 @@ public interface IRefreshTokenRepository : IRepository<RefreshToken>
 
 }
 
-public interface IScannedDomainRepository : IRepository<ScannedDomain>
+public interface IDomainRepository : IRepository<ScannedDomain>
 {
     Task<ScannedDomain?> FindActive(string domain, CancellationToken ct);
+    Task<ScannedDomain?> FindUserDomainByName(Guid userId, string domain, CancellationToken ct);
+    Task<ScannedDomain?> FindUserVerifiedDomainByName(Guid userId, string domain, CancellationToken ct);
     Task<int> CountPending(Guid userId, CancellationToken ct);
     Task<ScannedDomain?> FindPendingById(Guid domainId, Guid userId, CancellationToken ct);
     public Task<ScannedDomain?> GetByNameAndUser(string domainName, Guid userId, CancellationToken ct);
     Task<(IReadOnlyList<ScannedDomain>, int)> GetPaged(DomainFilter q, CancellationToken ct = default);
+}
+
+public interface IScanRepository : IRepository<Scan>
+{
+    Task<Scan?> FindRunningByDomain(Guid domainId, CancellationToken ct);
+    Task<Scan?> FindByIdempotencyKey(Guid key, CancellationToken ct);
+
 }

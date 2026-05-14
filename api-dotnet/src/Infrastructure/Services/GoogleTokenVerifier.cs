@@ -61,12 +61,19 @@ public class GoogleTokenVerifier : IGoogleTokenVerifier
 
         try
         {
+            // var subject = principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+            // var email = principal.FindFirst(JwtRegisteredClaimNames.Email)?.Value;
+            // var emailVerifiedClaim = principal.FindFirst("email_verified")?.Value;
+            // var emailVerified = bool.TryParse(emailVerifiedClaim, out var parsedEmailVerified) && parsedEmailVerified;
+
             var principal = _tokenHandler.ValidateToken(idToken, validationParameters, out _);
             var subject = principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
             var email = principal.FindFirst(JwtRegisteredClaimNames.Email)?.Value;
             var emailVerifiedClaim = principal.FindFirst("email_verified")?.Value;
             var emailVerified = bool.TryParse(emailVerifiedClaim, out var parsedEmailVerified) &&
                                 parsedEmailVerified;
+            var name = principal.FindFirst(JwtRegisteredClaimNames.Name)?.Value;
+            var picture = principal.FindFirst("picture")?.Value;
 
             if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(email))
             {
@@ -74,7 +81,7 @@ public class GoogleTokenVerifier : IGoogleTokenVerifier
                     Error.Unauthorized("Google token is missing required claims."));
             }
 
-            return Result<GoogleUserInfo>.Success(new GoogleUserInfo(subject, email, emailVerified));
+            return Result<GoogleUserInfo>.Success(new GoogleUserInfo(subject, email, emailVerified, name, picture));
         }
         catch (SecurityTokenExpiredException)
         {

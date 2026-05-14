@@ -1,3 +1,4 @@
+using Application.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.AspNetCore.Identity;
@@ -6,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Persistence;
 
-public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
+public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>, IVulnWatchDbContext
 {
     public VulnWatchDbContext(DbContextOptions<VulnWatchDbContext> options)
         : base(options) { }
@@ -68,6 +69,9 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
              .WithMany()
              .HasForeignKey(d => d.UserId)
              .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(d => new { d.UserId, d.DomainName }).IsUnique();
+            e.HasIndex(d => new { d.DomainName, d.VerificationStatus });
+            e.HasIndex(d => new { d.UserId, d.VerificationStatus });
         });
 
         builder.Entity<Scan>(e =>
@@ -87,6 +91,11 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
              .WithMany()
              .HasForeignKey(s => s.UserId)
              .OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(s => new { s.DomainId, s.Status });
+            e.HasIndex(s => new { s.UserId, s.Status });
+            e.HasIndex(s => s.DomainId)
+                .HasFilter("\"Status\" IN ('Queued', 'Running')")
+                .HasDatabaseName("IX_Scans_DomainId_Active");
         });
 
         builder.Entity<Finding>(e =>

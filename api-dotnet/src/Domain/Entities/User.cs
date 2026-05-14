@@ -21,11 +21,12 @@ public class User : IdentityUser<Guid>
         UpdatedAt = DateTime.UtcNow
     };
 
-    public static User CreateFromGoogle(string email, string googleId) => new()
+    public static User CreateFromGoogle(string email, string googleId, string? firstName = null, string? picture = null) => new()
     {
         Id = Guid.NewGuid(),
         Email = email,
         UserName = email,
+        FirstName = firstName,
         EmailConfirmed = true,
         GoogleId = googleId,
         CreatedAt = DateTime.UtcNow,

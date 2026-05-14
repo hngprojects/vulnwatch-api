@@ -161,16 +161,19 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     return ConnectionMultiplexer.Connect(config);
 });
 builder.Services.AddSingleton<IRedisProducer, RedisProducer>();
+builder.Services.AddSingleton<IRedisService, RedisService>();
 
 // Application services
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, AuthorizationResultHandler>();
 builder.Services.Configure<JwtConfig>(builder.Configuration.GetSection(JwtConfig.SectionName));
+builder.Services.AddScoped<IVulnWatchDbContext, VulnWatchDbContext>();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IGoogleTokenVerifier, GoogleTokenVerifier>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
-builder.Services.AddScoped<IScannedDomainRepository, ScannedDomainRepository>();
+builder.Services.AddScoped<IDomainRepository, DomainRepository>();
+builder.Services.AddScoped<IScanRepository, ScanRepository>();
 builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ITokenService, TokenService>();

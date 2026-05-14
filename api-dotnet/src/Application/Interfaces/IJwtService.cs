@@ -11,5 +11,5 @@ public interface IJwtService
 
     Result<TokenClaims> ValidateAccessToken(string token);
 
-    string GenerateRefreshTokenString();
+    string GenerateRefreshToken();
 }
