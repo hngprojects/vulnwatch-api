@@ -1,0 +1,50 @@
+@startuml
+title Java Worker - Redis Consumer & Job Processing
+
+participant "Redis Queue" as Redis
+participant "Redis Listener" as Listener
+participant "Scan Processor" as Processor
+participant "Scanner Orchestrator" as Orchestrator
+database "PostgreSQL" as DB
+
+== Worker Startup ==
+
+Listener -> Listener: 1. @PostConstruct
+Listener -> Redis: 2. Subscribe to 'scan:queue'
+Listener -> Listener: 3. BRPOP scan:queue (blocking)
+
+== Job Reception ==
+
+Redis --> Listener: 4. Job received
+Listener -> Processor: 5. process(scan_job)
+
+Processor -> DB: 6. UPDATE scans SET status='processing'
+Processor -> Processor: 7. Start metrics timer
+
+== Execute Scans ==
+
+Processor -> Orchestrator: 8. executeScans(domain)
+Orchestrator -> Orchestrator: 9. Run 5 parallel scanners
+
+note right of Orchestrator
+  Parallel execution:
+  - DnsScanner
+  - SslScanner
+  - HttpScanner
+  - CtLogScanner
+  - ExposureScanner
+end note
+
+Orchestrator --> Processor: 10. Return AggregatedResult
+
+== Store & Process ==
+
+Processor -> DB: 11. UPDATE scans SET raw_results
+Processor -> Processor: 12. Call OpenAI API
+Processor -> DB: 13. UPDATE scans SET status='completed', score
+Processor -> DB: 14. INSERT INTO findings
+
+Processor -> Processor: 15. Log completion
+Processor -> Listener: 16. Return to listening
+
+@enduml

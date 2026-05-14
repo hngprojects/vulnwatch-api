@@ -1,0 +1,58 @@
+name: Build, Lint and Test
+
+on:
+  pull_request:
+    branches: [dev, staging, main]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-dotnet:
+    name: Build and Test .NET API
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore api-dotnet/src/Web/Web.csproj
+
+      - name: Build .NET API
+        run: dotnet build api-dotnet/src/Web/Web.csproj --no-restore --configuration Release
+
+  build-java:
+    name: Build Java Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Build Java worker
+        run: |
+          cd worker-java
+          ./mvnw clean package -DskipTests

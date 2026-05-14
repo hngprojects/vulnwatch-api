@@ -1,0 +1,61 @@
+@startuml
+title Parallel 5-Surface Scanner Execution
+
+participant "Scan Processor" as Processor
+participant "ExecutorService" as Executor
+participant "DNS Scanner" as DNS
+participant "SSL Scanner" as SSL
+participant "HTTP Scanner" as HTTP
+participant "CT Log Scanner" as CT
+participant "Exposure Scanner" as Exposure
+participant "Result Aggregator" as Aggregator
+
+Processor -> Executor: 1. Submit 5 parallel tasks
+
+== Task 1: DNS ==
+Executor -> DNS: 2. performScan()
+activate DNS
+DNS -> DNS: 3. Query A, MX, NS, TXT
+DNS -> DNS: 4. Check DNSSEC
+DNS --> Executor: 5. Return DnsResult
+deactivate DNS
+
+== Task 2: SSL ==
+Executor -> SSL: 6. performScan()
+activate SSL
+SSL -> SSL: 7. Connect :443, get cert
+SSL -> SSL: 8. Check expiry, weak protocols
+SSL --> Executor: 9. Return SslResult
+deactivate SSL
+
+== Task 3: HTTP ==
+Executor -> HTTP: 10. performScan()
+activate HTTP
+HTTP -> HTTP: 11. GET / fetch headers
+HTTP -> HTTP: 12. Check HSTS, CSP, XFO
+HTTP -> HTTP: 13. Probe sensitive paths
+HTTP --> Executor: 14. Return HttpResult
+deactivate HTTP
+
+== Task 4: CT Logs ==
+Executor -> CT: 15. performScan()
+activate CT
+CT -> CT: 16. Query crt.sh API
+CT -> CT: 17. Parse subdomains
+CT --> Executor: 18. Return CtResult
+deactivate CT
+
+== Task 5: Exposures ==
+Executor -> Exposure: 19. performScan()
+activate Exposure
+Exposure -> Exposure: 20. Directory listing check
+Exposure -> Exposure: 21. Backup file probes
+Exposure --> Executor: 22. Return ExposureResult
+deactivate Exposure
+
+== Aggregate ==
+Executor -> Executor: 23. allOf().join()
+Executor -> Aggregator: 24. Merge 5 results
+Aggregator --> Processor: 25. Return aggregated JSON
+
+@enduml

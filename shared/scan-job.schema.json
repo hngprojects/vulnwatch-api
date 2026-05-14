@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ScanJob",
+  "type": "object",
+  "properties": {
+    "scan_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for the scan task"
+    },
+    "domain": {
+      "type": "string",
+      "description": "The domain to be scanned (e.g., example.com)"
+    },
+    "scan_type": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["dns", "ssl", "headers"]
+      },
+      "description": "Types of scans to perform"
+    },
+    "requested_by": {
+      "type": "string",
+      "format": "uuid",
+      "description": "User ID who requested the scan"
+    }
+  },
+  "required": ["scan_id", "domain", "scan_type", "requested_by"]
+}

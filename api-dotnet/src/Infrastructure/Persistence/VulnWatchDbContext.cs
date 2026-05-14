@@ -1,0 +1,143 @@
+using Domain.Entities;
+using Domain.Enums;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
+
+namespace Infrastructure.Persistence;
+
+public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
+{
+    public VulnWatchDbContext(DbContextOptions<VulnWatchDbContext> options)
+        : base(options) { }
+
+    // Users table is provided by IdentityDbContext
+    public DbSet<Waitlist> Waitlists => Set<Waitlist>();
+    public DbSet<ScannedDomain> Domains => Set<ScannedDomain>();
+    public DbSet<Scan> Scans => Set<Scan>();
+    public DbSet<Finding> Findings => Set<Finding>();
+    public DbSet<Remediation> Remediations => Set<Remediation>();
+    public DbSet<Integration> Integrations => Set<Integration>();
+    public DbSet<MonitoredRepository> MonitoredRepositories => Set<MonitoredRepository>();
+    public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
+    public DbSet<WebHookOutBox> WebHookOutBox => Set<WebHookOutBox>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
+    protected override void OnModelCreating(ModelBuilder builder)
+    {
+        base.OnModelCreating(builder); // must call base — sets up Identity tables
+
+        builder.Entity<User>(e =>
+        {
+            // Identity already handles Email uniqueness; only add custom index
+            e.Property(x => x.FirstName)
+               .HasMaxLength(100)
+               .IsRequired(false);
+
+            e.Property(x => x.LastName)
+                   .HasMaxLength(100)
+                   .IsRequired(false);
+
+            e.HasIndex(u => u.GoogleId).IsUnique().HasFilter("\"GoogleId\" IS NOT NULL");
+        });
+
+        builder.Entity<RefreshToken>(e =>
+        {
+            e.HasKey(t => t.Id);
+
+            e.Property(t => t.TokenHash)
+            .IsRequired()
+            .HasMaxLength(512);
+
+            e.HasIndex(t => t.TokenHash).IsUnique();
+
+            e.HasIndex(t => t.UserId);
+
+            e.Property(t => t.CreatedByIp).HasMaxLength(45);
+
+            e.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(t => t.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<ScannedDomain>(e =>
+        {
+            e.Property(d => d.VerificationStatus).HasConversion<string>();
+            e.HasOne(d => d.User)
+             .WithMany()
+             .HasForeignKey(d => d.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Scan>(e =>
+        {
+            e.HasIndex(s => s.IdempotencyKey).IsUnique();
+            e.Property(s => s.TargetType).HasConversion<string>();
+            e.Property(s => s.Status).HasConversion<string>();
+            e.HasOne(s => s.Domain)
+             .WithMany(d => d.Scans)
+             .HasForeignKey(s => s.DomainId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(s => s.Repository)
+                .WithMany(r => r.Scans)
+                .HasForeignKey(s => s.RepositoryId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(s => s.User)
+             .WithMany()
+             .HasForeignKey(s => s.UserId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Finding>(e =>
+        {
+            e.Property(f => f.Surface).HasConversion<string>();
+            e.Property(f => f.Severity).HasConversion<string>();
+            e.Property(f => f.Status).HasConversion<string>();
+            e.HasOne(f => f.Scan)
+             .WithMany(s => s.Findings)
+             .HasForeignKey(f => f.ScanId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Remediation>(e =>
+        {
+            e.Property(r => r.Status).HasConversion<string>();
+            e.HasOne(r => r.Finding)
+             .WithMany()
+             .HasForeignKey(r => r.FindingId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Integration>(e =>
+        {
+            e.Property(i => i.Status).HasConversion<string>();
+            e.HasOne(i => i.User)
+             .WithMany()
+             .HasForeignKey(i => i.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<MonitoredRepository>(e =>
+        {
+            e.HasIndex(r => r.RepoId).IsUnique();
+            e.HasOne(r => r.User)
+             .WithMany()
+             .HasForeignKey(r => r.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<NotificationPreferences>(e =>
+        {
+            e.HasOne(n => n.User)
+             .WithMany()
+             .HasForeignKey(n => n.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<WebHookOutBox>(e =>
+        {
+            e.Property(w => w.Status).HasConversion<string>();
+        });
+    }
+}

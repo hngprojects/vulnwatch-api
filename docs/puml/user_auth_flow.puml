@@ -1,0 +1,38 @@
+@startuml
+title User Registration & Authentication
+
+actor User as U
+participant "Next.js Frontend" as FE
+participant "C# API Controller" as Controller
+participant "Auth Handler" as Handler
+participant "JWT Service" as JWT
+database "PostgreSQL" as DB
+participant "Email Service" as Email
+
+
+U -> FE: 1. Enter email/password
+FE -> Controller: 2. POST /api/auth/signup
+Controller -> Handler: 3. RegisterCommand(email, password)
+Handler -> Handler: 4. Hash password (bcrypt)
+Handler -> DB: 5. INSERT INTO users
+DB --> Handler: 6. User created
+Handler -> JWT: 7. Generate verification token
+Handler -> Email: 8. Send verification link
+Handler --> Controller: 9. Return success
+Controller --> FE: 10. 201 Created
+FE --> U: 11. "Check your email"
+
+
+U -> FE: 12. Enter credentials
+FE -> Controller: 13. POST /api/auth/login
+Controller -> Handler: 14. LoginCommand(email, password)
+Handler -> DB: 15. SELECT user WHERE email=?
+DB --> Handler: 16. Return user + password_hash
+Handler -> Handler: 17. Verify password
+Handler -> JWT: 18. Generate tokens
+Handler --> Controller: 19. Return tokens
+Controller --> FE: 20. 200 OK
+FE -> FE: 21. Store tokens
+FE --> U: 22. Redirect to dashboard
+
+@enduml

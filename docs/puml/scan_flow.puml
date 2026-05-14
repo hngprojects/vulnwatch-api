@@ -1,0 +1,39 @@
+@startuml
+title Scan Initiation - C# API to Redis Queue
+
+actor User as U
+participant "Next.js Frontend" as FE
+participant "C# API Controller" as Controller
+participant "Scan Handler" as Handler
+database "PostgreSQL" as DB
+participant "Redis Producer" as Producer
+participant "Redis Queue" as Redis
+
+U -> FE: 1. Click "Run Scan"
+FE -> Controller: 2. POST /api/domains/{id}/scans
+Controller -> Handler: 3. CreateScanCommand(id, user_id)
+Handler -> DB: 4. Verify domain ownership
+DB --> Handler: 5. Domain is verified
+
+Handler -> DB: 6. INSERT INTO scans (status='queued')
+DB --> Handler: 7. Return scan_id
+
+Handler -> Handler: 8. Create ScanJob payload
+note right
+  {
+    "scan_id": "abc-123",
+    "domain": "example.com",
+    "user_id": "user-456"
+  }
+end note
+
+Handler -> Producer: 9. Publish to Redis
+Producer -> Redis: 10. LPUSH scan:queue
+Redis --> Producer: 11. Acknowledged
+
+Handler --> Controller: 12. Return scan_id
+Controller --> FE: 13. 202 Accepted
+FE -> FE: 14. Start polling
+FE --> U: 15. "Scan queued"
+
+@enduml

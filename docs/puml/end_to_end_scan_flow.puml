@@ -1,0 +1,46 @@
+@startuml
+title  End-to-End Scan Flow
+
+actor User as U
+participant "Next.js" as FE
+participant "C# API" as API
+database "PostgreSQL" as DB
+participant "Redis" as Redis
+participant "Java Worker" as Worker
+participant "External" as Ext
+
+== Phase 1: Setup ==
+U -> FE: 1. Sign up / Log in
+FE -> API: 2. Auth request
+API -> DB: 3. Create user
+U -> FE: 4. Add domain
+FE -> API: 5. POST /domains
+API -> DB: 6. Store domain with token
+U -> FE: 7. Add DNS TXT record
+U -> FE: 8. Click verify
+FE -> API: 9. POST /verify
+API -> Ext: 10. Check DNS
+API -> DB: 11. Mark verified
+
+== Phase 2: Scan ==
+U -> FE: 12. Click Run Scan
+FE -> API: 13. POST /scans
+API -> DB: 14. Create scan record
+API -> Redis: 15. LPUSH scan:queue
+API --> FE: 16. 202 Accepted
+
+== Phase 3: Processing ==
+Redis -> Worker: 17. BRPOP gets job
+Worker -> DB: 18. Update status='processing'
+Worker -> Ext: 19. 5 parallel scans
+Worker -> Ext: 20. OpenAI API
+Worker -> DB: 21. Store findings
+Worker -> Redis: 22. Update status
+
+== Phase 4: Results ==
+FE -> API: 23. Poll GET /scans/{id}
+API -> DB: 24. Query results
+API --> FE: 25. Return findings
+FE --> U: 26. Display dashboard
+
+@enduml

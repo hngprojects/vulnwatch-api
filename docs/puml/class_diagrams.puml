@@ -1,0 +1,405 @@
+@startuml
+'!theme plain
+'skinparam classAttributeIconSize 0
+'skinparam backgroundColor #FEFEFE
+skinparam class {
+    BackgroundColor #F8F9FA
+    BorderColor #2C3E50
+    ArrowColor #3498DB
+    FontName Arial
+    FontSize 12
+}
+skinparam interface {
+    BackgroundColor #E8F4FD
+    BorderColor #2980B9
+    FontColor #2980B9
+}
+skinparam enum {
+    BackgroundColor #FFF3E0
+    BorderColor #E65100
+    FontColor #E65100
+}
+
+title Java Worker Class Diagram
+
+
+
+class ScanJob {
+    - scanId: UUID
+    - domain: String
+    - scanTypes: List<TargetType>
+    - requestedBy: UUID
+    - enqueuedAt: Instant
+    --
+    + getScanId(): UUID
+    + getDomain(): String
+    + getScanTypes(): List<TargetType>
+    + getRequestedBy(): UUID
+    + getEnqueuedAt(): Instant
+}
+
+enum TargetType {
+    DOMAIN
+    REPOSITORY
+}
+
+' Scans table (matches ERD)
+class ScanEntity {
+    - id: UUID
+    - userId: UUID
+    - idempotencyKey: UUID
+    - targetType: String
+    - domainId: UUID
+    - repoId: Long
+    - status: String
+    - securityScore: int
+    - startedAt: Instant
+    - completedAt: Instant
+    --
+    + getId(): UUID
+    + getStatus(): String
+    + getSecurityScore(): int
+    + setStatus(status: String): void
+    + setSecurityScore(score: int): void
+    + setCompletedAt(completedAt: Instant): void
+}
+
+' Raw data container (in-memory only, not stored in DB)
+class ScanResult {
+    - scanId: UUID
+    - scannerName: String
+    - surface: SurfaceType
+    - rawData: Map<String, Object>
+    - isSuccess: boolean
+    - errorMessage: String
+    --
+    + getRawData(): Map<String, Object>
+    + toJson(): String
+}
+
+class AggregatedRawData {
+    - scanId: UUID
+    - domain: String
+    - rawResults: List<ScanResult>
+    - failures: List<FailureInfo>
+    --
+    + toJson(): String
+    + hasAnySuccess(): boolean
+}
+
+class FailureInfo {
+    - scannerName: String
+    - errorMessage: String
+    - failureTime: Instant
+}
+
+enum SurfaceType {
+    DNS
+    SSL
+    HTTP_HEADERS
+    CT_LOG
+    EXPOSURE
+    DEPENDENCY
+    SAST
+    SECRETS
+}
+
+
+' Findings table (matches ERD)
+class Finding {
+    - id: UUID
+    - scanId: UUID
+    - surface: SurfaceType
+    - severity: Severity
+    - title: String
+    - cveId: String
+    - aiExplanation: String
+    - technicalPayload: String
+    - remediationSteps: String
+    - status: FindingStatus
+    --
+    + builder(): FindingBuilder
+    + getScanId(): UUID
+    + getSurface(): SurfaceType
+    + getSeverity(): Severity
+    + getCveId(): String
+    + getAiExplanation(): String
+    + getRemediationSteps(): String
+}
+
+enum Severity {
+    CRITICAL
+    HIGH
+    MEDIUM
+    LOW
+}
+
+enum FindingStatus {
+    OPEN
+    REMEDIATED
+    IGNORED
+}
+
+' Remediations table (matches ERD)
+class Remediation {
+    - id: UUID
+    - findingId: UUID
+    - prNumber: int
+    - prUrl: String
+    - status: String
+    - createdAt: Instant
+    --
+    + getFindingId(): UUID
+    + getPrNumber(): int
+    + getPrUrl(): String
+    + getStatus(): String
+}
+
+' Vulnerability Intel table (matches ERD)
+class VulnerabilityIntel {
+    - cveId: String
+    - repoId: Long
+    - description: String
+    - cvssScore: BigDecimal
+    - hasKnownExploit: boolean
+    - affectedPackages: Map<String, String>
+    - lastSyncedAt: Instant
+    --
+    + getCveId(): String
+    + getCvssScore(): BigDecimal
+    + hasKnownExploit(): boolean
+}
+
+class EnrichedScanResult {
+    - scanId: UUID
+    - securityScore: int
+    - findings: List<Finding>
+    - processedAt: Instant
+}
+
+
+interface Scanner {
+    ..
+    + scan(ScanJob request): ScanResult
+    + getSupportedTargetType(): TargetType
+}
+
+' ----- DOMAIN SCANNERS (5 scanners) -----
+class DnsScanner {
+    --
+    + scan(ScanJob request): ScanResult
+    + getSupportedTargetType(): TargetType
+}
+
+class SslScanner {
+    --
+    + scan(ScanJob request): ScanResult
+    + getSupportedTargetType(): TargetType
+}
+
+class HttpScanner {
+    --
+    + scan(ScanJob request): ScanResult
+    + getSupportedTargetType(): TargetType
+}
+
+'class CtLogScanner {
+'    --
+'    + scan(ScanJob request): ScanResult
+'    + getSupportedTargetType(): TargetType
+'}
+'
+'class ExposureScanner {
+'    --
+'    + scan(ScanJob request): ScanResult
+'    + getSupportedTargetType(): TargetType
+'}
+'
+'' ----- REPOSITORY SCANNERS (3 scanners) -----
+'class DependencyScanner {
+'    --
+'    + scan(ScanJob request): ScanResult
+'    + getSupportedTargetType(): TargetType
+'}
+'
+'class SastScanner {
+'    --
+'    + scan(ScanJob request): ScanResult
+'    + getSupportedTargetType(): TargetType
+'}
+'
+'class SecretsScanner {
+'    --
+'    + scan(ScanJob request): ScanResult
+'    + getSupportedTargetType(): TargetType
+'}
+
+
+class ScanOrchestrator {
+    - executor: ExecutorService
+    - scanners: List<Scanner>
+    - timeout: Duration
+    --
+    + runScan(ScanJob request): AggregatedRawData
+    - filterScannersByTargetType(targetType: TargetType): List<Scanner>
+    - aggregateRawResults(futures: List<Future<ScanResult>>): AggregatedRawData
+}
+
+' ============================================
+' AI LAYER
+' ============================================
+
+class AiEnricher {
+    - aiClient: OpenAiClient
+    - vulnerabilityIntelRepo: VulnerabilityIntelRepository
+    --
+    + enrich(rawData: AggregatedRawData): EnrichedScanResult
+    - buildPrompt(aggregatedRawJson: String): String
+    - callOpenAi(prompt: String): String
+    - parseResponse(response: String): List<Finding>
+    - calculateSecurityScore(findings: List<Finding>): int
+    - enhanceWithCveData(finding: Finding): Finding
+}
+
+class ScoreCalculator {
+    --
+    + calculate(finalScore: int): int
+    - applySeverityWeights(findings: List<Finding>): int
+}
+
+
+class ScanRepository {
+    --
+    + save(scan: ScanEntity): void
+    + updateStatus(scanId: UUID, status: String): void
+    + updateScore(scanId: UUID, score: int): void
+    + updateCompletedAt(scanId: UUID): void
+    + findById(scanId: UUID): ScanEntity
+}
+
+class FindingRepository {
+    --
+    + saveAll(findings: List<Finding>): void
+    + findByScanId(scanId: UUID): List<Finding>
+    + updateStatus(findingId: UUID, status: FindingStatus): void
+}
+
+class RemediationRepository {
+    --
+    + save(remediation: Remediation): void
+    + updatePrStatus(findingId: UUID, prNumber: int, status: String): void
+    + findByFindingId(findingId: UUID): Remediation
+}
+
+class VulnerabilityIntelRepository {
+    --
+    + findByCveId(cveId: String): VulnerabilityIntel
+    + saveAll(intel: List<VulnerabilityIntel>): void
+    + findRecentlyExploited(): List<VulnerabilityIntel>
+}
+
+
+
+Scanner <|.. DnsScanner : implements
+Scanner <|.. SslScanner : implements
+Scanner <|.. HttpScanner : implements
+'Scanner <|.. CtLogScanner : implements
+'Scanner <|.. ExposureScanner : implements
+'Scanner <|.. DependencyScanner : implements
+'Scanner <|.. SastScanner : implements
+'Scanner <|.. SecretsScanner : implements
+
+
+
+' Orchestrator connections
+ScanOrchestrator --> Scanner : uses
+ScanOrchestrator --> ScanJob : receives
+ScanOrchestrator ..> AggregatedRawData : produces
+
+' AI Enricher connections
+AiEnricher --> AggregatedRawData : consumes
+AiEnricher --> VulnerabilityIntelRepository : uses
+AiEnricher --> OpenAiClient : uses
+AiEnricher ..> EnrichedScanResult : produces
+
+' Score Calculator connections
+ScoreCalculator --> EnrichedScanResult : uses
+
+
+' Repositories store entities
+ScanRepository --> ScanEntity : stores
+FindingRepository --> Finding : stores
+RemediationRepository --> Remediation : stores
+VulnerabilityIntelRepository --> VulnerabilityIntel : stores
+
+' AI Enricher uses repositories
+AiEnricher --> FindingRepository : saves to
+AiEnricher --> ScanRepository : updates
+
+' ============================================
+' COMPOSITION ARROWS
+' ============================================
+
+AggregatedRawData --> ScanResult : contains
+AggregatedRawData --> FailureInfo : contains
+EnrichedScanResult --> Finding : contains
+
+' Enum usages
+Finding --> SurfaceType : uses
+Finding --> Severity : uses
+Finding --> FindingStatus : uses
+
+ScanResult --> SurfaceType : uses
+ScanJob "1" o-- "many" TargetType : contains
+Scanner --> TargetType : returns
+ScanOrchestrator --> TargetType : filters by
+
+' Finding to Remediation relationship
+Finding <--> Remediation : 1 : 0..1
+
+
+
+note top of ScanResult
+  <b>IN-MEMORY</b>
+  • Temporary container for raw scanner output
+  • Used only to pass data to AI
+  • Discarded after AI processing
+end note
+
+note top of Finding
+  <b>FINDINGS TABLE</b>
+  • ai_explanation - Plain English from OpenAI
+  • remediation_steps - Step-by-step fixes from OpenAI
+  • technical_payload - Raw scanner JSON
+  • severity - Classified by OpenAI
+  • surface - Which scanner produced this
+end note
+
+note top of VulnerabilityIntel
+  <b>VULNERABILITY_INTEL TABLE (Matches ERD)</b>
+  • Synced from NVD / GitHub Advisory DB
+  • Used by DependencyScanner
+  • Contains CVSS scores for prioritization
+end note
+
+note right of ScanOrchestrator
+  <b>Threading Strategy:</b>
+  • Executors.newFixedThreadPool(5)
+  • scanners run in parallel
+  • Each scanner returns ScanResult (in-memory)
+  • Results aggregated after all complete
+end note
+
+note bottom of AiEnricher
+  <b>AI ENRICHMENT PROCESS:</b>
+  1. Takes AggregatedRawData (in-memory JSON)
+  2. Sends to OpenAI with system prompt
+  3. OpenAI returns structured findings with:
+     - Severity classification
+     - Plain English explanation
+     - Remediation steps
+  4. Converts to Finding entities
+  5. Saves to findings table via FindingRepository
+end note
+
+@enduml

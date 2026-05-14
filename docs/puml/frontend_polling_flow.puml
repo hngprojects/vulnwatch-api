@@ -1,0 +1,37 @@
+@startuml
+title Results Polling Flow
+
+actor User as U
+participant "Next.js Frontend" as FE
+participant "C# API Controller" as Controller
+participant "Scan Handler" as Handler
+database "PostgreSQL" as DB
+
+FE -> FE: 1. Start polling (every 2 sec)
+FE -> Controller: 2. GET /api/scans/{id}
+Controller -> Handler: 3. GetScanQuery(id)
+Handler -> DB: 4. SELECT status, score FROM scans
+DB --> Handler: 5. Return scan status
+
+alt Status = 'completed'
+    Handler -> DB: 6. SELECT findings
+    DB --> Handler: 7. Return findings
+    Handler --> Controller: 8. Return full results
+    Controller --> FE: 9. 200 OK
+    FE -> FE: 10. Stop polling
+    FE --> U: 11. Display results
+
+else Status = 'processing'
+    Handler --> Controller: 6. Return {status:'processing'}
+    Controller --> FE: 7. 200 OK
+    FE -> FE: 8. Continue polling
+    FE --> U: 9. Show spinner
+
+else Status = 'failed'
+    Handler --> Controller: 6. Return {status:'failed', error}
+    Controller --> FE: 7. 200 OK
+    FE -> FE: 8. Stop polling
+    FE --> U: 9. Show error + retry
+end
+
+@enduml

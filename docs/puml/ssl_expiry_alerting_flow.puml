@@ -1,0 +1,31 @@
+@startuml
+title SSL Expiry Alerting - Automated Cron Job
+
+participant "C# Cron Scheduler" as Cron
+database "PostgreSQL" as DB
+participant "Email Service" as Email
+actor User as U
+
+Cron -> Cron: 1. Trigger daily at 09:00 UTC
+Cron -> DB: 2. Get latest scan for each domain
+
+DB --> Cron: 3. Return {domain, email, expiry_date}
+
+Cron -> Cron: 4. Calculate days_left
+
+alt days_left <= 30 AND days_left > 7
+    Cron -> Email: 5. Send first alert
+    Email -> U: 6. "SSL expires in {days} days"
+    Cron -> DB: 7. Mark alert_30d_sent=true
+
+else days_left <= 7 AND days_left > 0
+    Cron -> Email: 5. Send URGENT alert
+    Email -> U: 6. "URGENT: SSL expires in {days} days"
+    Cron -> DB: 7. Mark alert_7d_sent=true
+
+else days_left <= 0
+    Cron -> Email: 5. Send CRITICAL alert
+    Email -> U: 6. "CERTIFICATE EXPIRED"
+end
+
+@enduml

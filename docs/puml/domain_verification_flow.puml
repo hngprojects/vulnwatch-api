@@ -1,0 +1,40 @@
+@startuml
+title Domain Addition & DNS TXT Verification
+
+actor User as U
+participant "Next.js Frontend" as FE
+participant "C# API Controller" as Controller
+participant "Domain Handler" as Handler
+database "PostgreSQL" as DB
+participant "DNS Servers" as DNS
+
+U -> FE: 1. Enter domain name
+FE -> Controller: 2. POST /api/domains
+Controller -> Handler: 3. AddDomainCommand(domain)
+Handler -> Handler: 4. Generate verification_token
+Handler -> DB: 5. INSERT INTO domains
+DB --> Handler: 6. Return domain_id
+Handler --> Controller: 7. Return domain + token
+Controller --> FE: 8. 201 Created
+FE --> U: 9. Show DNS instruction
+
+
+U -> DNS: 10. Add TXT record manually
+U -> FE: 11. Click "Verify Now"
+FE -> Controller: 12. POST /api/domains/{id}/verify
+Controller -> Handler: 13. VerifyDomainCommand(id)
+Handler -> DNS: 14. Query TXT record
+DNS --> Handler: 15. Return TXT records
+
+alt Record matches
+    Handler -> DB: 16. UPDATE domains SET verified=true
+    Handler --> Controller: 17. Success
+    Controller --> FE: 18. 200 OK
+    FE --> U: 19. "Domain verified!"
+else No match
+    Handler --> Controller: 16. Failed
+    Controller --> FE: 17. 400 Bad Request
+    FE --> U: 18. "Try again in 5 minutes"
+end
+
+@enduml

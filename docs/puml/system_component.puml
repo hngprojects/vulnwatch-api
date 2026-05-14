@@ -1,0 +1,82 @@
+@startuml
+!theme plain
+skinparam componentStyle rectangle
+skinparam roundcorner 10
+
+skinparam defaultFontSize 14
+skinparam noteFontSize 12
+skinparam TitleFontSize 22
+skinparam nodesep 60
+skinparam ranksep 50
+
+title VulnWatch AI - System Architecture
+
+package "Client Layer (Next.js)" {
+    [Landing Page] as LP
+    [Dashboard WebApp] as DW
+}
+
+node "API Gateway (Entry Point)" as Gateway {
+    component "C# .NET API\n(The Front Door)" as API <<Orchestrator>>
+    note right of API
+        <b>Responsibilities:</b>
+        • User Auth & Domain Verification
+        • Creates scan records
+        • Drops jobs in Redis
+        • SSL Expiry Cron & Emails
+        • Serves dashboard data
+    end note
+}
+
+' Positioning the Message Queue and DB side-by-side below the API
+queue "Redis" as MQ {
+    [scan:queue]
+    [scan:results]
+}
+
+database "PostgreSQL" as DB {
+    frame "Tables" {
+        [Users]
+        [Domains]
+        [Scans]
+        [Findings]
+    }
+}
+
+node "Execution Layer (Worker)" as Exec {
+    component "Java Spring Boot Worker" as Worker <<Engine>>
+    note right of Worker
+        <b>Execution Steps:</b>
+        1. Listen to scan:queue
+        2. DNS/SSL/HTTP Probes
+        3. Aggregates raw results
+        4. Calls OpenAI API
+        5. Updates DB & Status
+    end note
+}
+
+cloud "External Services" as Ext {
+    [OpenAI API] as AI
+    [DNS Servers] as DNS
+    [Target Domains] as HTTP
+    [crt.sh API] as CT
+}
+
+
+LP -down-> API : REST (JWT)
+DW -down-> API
+
+API -down-> DB : 1. Create records\n2. Read dashboard info
+API -down-> MQ : 3. Push to scan:queue
+
+MQ -down-> Worker : 4. Pull job
+Worker -down-> DB : 6. Update status/findings
+Worker -down-> MQ : 7. Push results
+
+' External calls flowing out from the worker
+Worker -down-> DNS
+Worker -down-> HTTP
+Worker -down-> CT
+Worker -down-> AI
+
+@enduml

@@ -1,0 +1,40 @@
+@startuml
+title AI Intelligence Layer - OpenAI Integration
+
+participant "AI Processor" as AI
+participant "OpenAI Client" as Client
+participant "OpenAI API" as OpenAI
+participant "Score Calculator" as Score
+database "PostgreSQL" as DB
+
+AI -> AI: 1. Receive aggregated scan JSON
+
+AI -> AI: 2. Build constrained system prompt
+note right
+  "Return ONLY JSON with:
+   - security_score (0-100)
+   - findings array
+   Each finding: severity, title,
+   plain_english_explanation,
+   remediation_steps"
+end note
+
+AI -> Client: 3. createRequest()
+Client -> OpenAI: 4. POST /v1/chat/completions
+OpenAI -> OpenAI: 5. Process (2-5 sec)
+OpenAI --> Client: 6. Return JSON
+Client --> AI: 7. Response body
+
+AI -> AI: 8. Parse & validate JSON
+AI -> AI: 9. Extract findings
+
+AI -> Score: 10. calculateWeightedScore
+Score -> Score: 11. e.g 100 - penalties
+Score --> AI: 12. Return final_score
+
+AI -> DB: 13. BEGIN TRANSACTION
+AI -> DB: 14. INSERT findings (batch)
+AI -> DB: 15. UPDATE scans SET status='completed', score
+AI -> DB: 16. COMMIT
+
+@enduml

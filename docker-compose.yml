@@ -1,0 +1,52 @@
+services:
+  api:
+    build:
+      context: ./api-dotnet
+      dockerfile: Dockerfile
+    ports:
+      - "5000:80"
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - ConnectionStrings__DefaultConnectionString=Host=postgres;Port=5432;Database=vulnwatch;Username=postgres;Password=password
+      - Redis__Configuration=redis:6379
+      - ASPNETCORE_ENVIRONMENT=Development
+
+  worker:
+    build:
+      context: ./worker-java
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - redis
+      - postgres
+    environment:
+      - SPRING_REDIS_HOST=redis
+      - SPRING_REDIS_PORT=6379
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/vulnwatch
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=password
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+      - SPRING_FLYWAY_ENABLED=true
+      - SPRING_FLYWAY_BASELINE_ON_MIGRATE=true
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=vulnwatch
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
