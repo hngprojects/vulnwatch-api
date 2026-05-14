@@ -42,7 +42,7 @@ public class JwtService : IJwtService
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    public string GenerateRefreshTokenString()
+    public string GenerateRefreshToken()
     {
         var bytes = new byte[32];
         System.Security.Cryptography.RandomNumberGenerator.Fill(bytes);

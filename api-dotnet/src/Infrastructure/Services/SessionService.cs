@@ -31,7 +31,7 @@ public class SessionService : ISessionService
         string? ipAddress = null, CancellationToken ct = default)
     {
         var accessToken = _jwtService.GenerateToken(user);
-        var refreshStr = _jwtService.GenerateRefreshTokenString();
+        var refreshStr = _jwtService.GenerateRefreshToken();
         var expiresAt = DateTime.UtcNow.AddDays(_config.RefreshTokenExpiryDays);
         var accessExpiry = DateTime.UtcNow.AddMinutes(_config.AccessTokenExpiryMinutes);
 

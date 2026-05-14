@@ -26,7 +26,7 @@ public record DomainFilter(
 
 public class GetDomainsHandler(
     IHttpContextAccessor _http,
-    IScannedDomainRepository domains,
+    IDomainRepository domains,
     ICurrentUser currentUser)
     : IRequestHandler<GetDomainsQuery, Result<PagedResult<DomainSummary>>>
 {

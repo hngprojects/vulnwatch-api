@@ -6,14 +6,27 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Persistence.Repositories;
 
-public sealed class ScannedDomainRepository(VulnWatchDbContext db)
-    : BaseRepository<ScannedDomain>(db), IScannedDomainRepository
+public sealed class DomainRepository(VulnWatchDbContext db)
+    : BaseRepository<ScannedDomain>(db), IDomainRepository
 {
     public Task<ScannedDomain?> FindActive(string domain, CancellationToken ct) =>
         Db.Domains
             .FirstOrDefaultAsync(d =>
                 d.DomainName == domain &&
                 d.VerificationStatus != VerificationStatus.Revoked, ct);
+
+    public Task<ScannedDomain?> FindUserDomainByName(Guid userId, string domain, CancellationToken ct) =>
+        Db.Domains
+        .FirstOrDefaultAsync(d =>
+        d.UserId == userId &&
+        d.DomainName == domain, ct);
+
+    public Task<ScannedDomain?> FindUserVerifiedDomainByName(Guid userId, string domain, CancellationToken ct) =>
+        Db.Domains
+        .FirstOrDefaultAsync(d =>
+        d.UserId == userId &&
+        d.DomainName == domain &&
+        d.VerificationStatus == VerificationStatus.Verified, ct);
 
     public Task<int> CountPending(Guid userId, CancellationToken ct) =>
         Db.Domains

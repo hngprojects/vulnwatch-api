@@ -13,10 +13,10 @@ public class RedisProducer : IRedisProducer
         _redis = redis;
     }
 
-    public async Task PublishAsync<T>(string channel, T message)
-    {
-        var db = _redis.GetDatabase();
-        var json = JsonSerializer.Serialize(message);
-        await db.PublishAsync(channel, json);
-    }
+    // public async Task PublishAsync<T>(string channel, T message)
+    // {
+    //     var db = _redis.GetDatabase();
+    //     var json = JsonSerializer.Serialize(message);
+    //     await db.PublishAsync(channel, json);
+    // }
 }

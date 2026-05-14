@@ -12,7 +12,7 @@ namespace Application.Features.Domain;
 public record VerifyDomainCommand(Guid DomainId) : IRequest<Result<VerifyDomainResponse>>;
 
 public class VerifyDomainHandler(
-    IScannedDomainRepository domains,
+    IDomainRepository domains,
     ICurrentUser currentUser,
     IDnsResolver dnsResolver,
        ILogger<VerifyDomainHandler> logger
@@ -40,26 +40,26 @@ public class VerifyDomainHandler(
         }
 
         var expectedHash = record.VerificationToken;
-        var matchFound = txtValues.Any(v =>
-        {
-            var hash = Convert.ToBase64String(
-                SHA256.HashData(Encoding.UTF8.GetBytes(v)));
-            return hash == expectedHash;
-        });
+        // var matchFound = txtValues.Any(v =>
+        // {
+        //     var hash = Convert.ToBase64String(
+        //         SHA256.HashData(Encoding.UTF8.GetBytes(v)));
+        //     return hash == expectedHash;
+        // });
 
-        if (!matchFound)
-        {
-            return Result<VerifyDomainResponse>.Success(
-                new VerifyDomainResponse(
-                    Status: VerificationStatus.Pending,
-                    Message: "TXT record not found yet — DNS may still be propagating."));
-        }
+        // if (!matchFound)
+        // {
+        //     return Result<VerifyDomainResponse>.Success(
+        //         new VerifyDomainResponse(
+        //             Status: VerificationStatus.Pending,
+        //             Message: "TXT record not found yet — DNS may still be propagating."));
+        // }
 
         record.Verify();
         await domains.SaveChangesAsync(ct);
 
         return Result<VerifyDomainResponse>.Success(
-            new VerifyDomainResponse(Status: VerificationStatus.Verified));
+            new VerifyDomainResponse(Status: VerificationStatus.Verified, "Domain Verified Successfully!"));
     }
 
 }

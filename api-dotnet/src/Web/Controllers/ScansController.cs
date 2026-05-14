@@ -22,11 +22,11 @@ public class ScansController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<Result<ScanResponse>>> Create(
+    public async Task<ActionResult<Result<StartScanResponse>>> Create(
         [FromHeader(Name = "Idempotency-Key")] Guid idempotencyKey,
-        [FromBody] CreateScanRequest body)
+        [FromBody] StartScanRequest body)
     {
-        var command = new CreateScanCommand(idempotencyKey, body.Domain, body.ScanTypes);
+        var command = new StartScanCommand(body.Domain, body.Coverage, idempotencyKey);
         var result = await _mediator.Send(command);
         return result.ToHttpResponse(this);
     }
