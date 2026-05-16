@@ -22,12 +22,16 @@ public class VerifyDomainHandler(
         VerifyDomainCommand cmd,
         CancellationToken ct)
     {
-        var record = await domains.FindPendingById(cmd.DomainId, currentUser.UserId, ct);
+        var record = await domains.GetById(cmd.DomainId, ct);
 
-        if (record is null)
+        if (record is null || record.UserId != currentUser.UserId)
             return Result<VerifyDomainResponse>.Failure(
-                Error.NotFound("Domain not found or already verified."));
+                Error.NotFound("Domain not found."));
 
+        if (record.VerificationStatus == VerificationStatus.Verified)
+            return Result<VerifyDomainResponse>.Failure(
+                Error.Conflict("Domain already verified."));
+                
         var txtHost = $"_vulnwatch-verify.{record.DomainName}";
         var txtValues = await dnsResolver.GetTxtRecords(txtHost, ct);
 

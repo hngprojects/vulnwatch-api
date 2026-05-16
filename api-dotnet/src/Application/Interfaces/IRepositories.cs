@@ -1,4 +1,5 @@
 using Application.Features.Domain;
+using Application.Features.Scans;
 using Domain.Entities;
 
 namespace Application.Interfaces;
@@ -21,6 +22,8 @@ public interface IRefreshTokenRepository : IRepository<RefreshToken>
 
 public interface IDomainRepository : IRepository<ScannedDomain>
 {
+    Task<ScannedDomain?> GetById(Guid domainId, CancellationToken ct = default);
+    Task<ScannedDomain?> FindUserDomainById(Guid userId, Guid domainId, CancellationToken ct);
     Task<ScannedDomain?> FindActive(string domain, CancellationToken ct);
     Task<ScannedDomain?> FindUserDomainByName(Guid userId, string domain, CancellationToken ct);
     Task<ScannedDomain?> FindUserVerifiedDomainByName(Guid userId, string domain, CancellationToken ct);
@@ -34,5 +37,5 @@ public interface IScanRepository : IRepository<Scan>
 {
     Task<Scan?> FindRunningByDomain(Guid domainId, CancellationToken ct);
     Task<Scan?> FindByIdempotencyKey(Guid key, CancellationToken ct);
-
+    Task<(List<Scan> Items, int TotalCount)> GetPaged(ScanFilter filter, CancellationToken ct);
 }

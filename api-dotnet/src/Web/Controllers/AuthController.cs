@@ -3,10 +3,12 @@ using Application.Features.Auth.DTOs;
 using Domain.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Web.Extensions;
 
 namespace Web.Controllers;
 
+[EnableRateLimiting(RateLimitExtensions.AuthPolicy)]
 [ApiController]
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
