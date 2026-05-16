@@ -94,6 +94,38 @@
         {
           "name": "SmtpCredentials__Port",
           "value": "587"
+        },
+        {
+          "name": "RateLimit__Auth__PermitLimit",
+          "value": 10
+        },
+        {
+          "name": "RateLimit__Auth__WindowSeconds",
+          "value": "60"
+        },
+        {
+          "name": "RateLimit__General__PermitLimit",
+          "value": "10"
+        },
+        {
+          "name": "RateLimit__General__WindowSeconds",
+          "value": "60"
+        },
+        {
+          "name": "Cors__AllowedOrigins__0",
+          "value": "http://localhost:3000"
+        },
+        {
+          "name": "Cors__AllowedOrigins__1",
+          "value": "https://staging.vuln-watch.hng14.com"
+        },
+        {
+          "name": "Cors__AllowedOrigins__2",
+          "value": "https://vuln-watch.hng14.com"
+        },
+        {
+          "name": "Dns__Lookup",
+          "value": "true"
         }
       ],
       "secrets": [

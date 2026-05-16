@@ -2,8 +2,7 @@ name: CD — Dev (ECS)
 
 on:
   push:
-    branches:
-      - dev
+    branches: [ dev, feat/rate-limit ]
 
 concurrency:
   group: cd-dev
