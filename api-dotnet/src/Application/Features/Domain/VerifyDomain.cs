@@ -6,6 +6,8 @@ using Domain.Common;
 using Domain.Enums;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
+
 
 namespace Application.Features.Domain;
 
@@ -15,7 +17,8 @@ public class VerifyDomainHandler(
     IDomainRepository domains,
     ICurrentUser currentUser,
     IDnsResolver dnsResolver,
-       ILogger<VerifyDomainHandler> logger
+    ILogger<VerifyDomainHandler> logger,
+    IConfiguration config
 ) : IRequestHandler<VerifyDomainCommand, Result<VerifyDomainResponse>>
 {
     public async Task<Result<VerifyDomainResponse>> Handle(
@@ -28,42 +31,51 @@ public class VerifyDomainHandler(
             return Result<VerifyDomainResponse>.Failure(
                 Error.NotFound("Domain not found."));
 
-        if (record.VerificationStatus == VerificationStatus.Verified)
+        if (record.VerificationStatus != VerificationStatus.Pending)
             return Result<VerifyDomainResponse>.Failure(
-                Error.Conflict("Domain already verified."));
-                
-        var txtHost = $"_vulnwatch-verify.{record.DomainName}";
-        var txtValues = await dnsResolver.GetTxtRecords(txtHost, ct);
+                record.VerificationStatus == VerificationStatus.Verified
+                    ? Error.Conflict("Domain already verified.")
+                    : Error.Conflict("Domain is not pending verification."));
 
-        foreach (var value in txtValues)
+        if (config.GetValue<bool>("Dns:Lookup"))
         {
-            logger.LogInformation(
-                "Resolved TXT record for {Host}: {Value}",
-                txtHost,
-                value);
+            var txtHost = $"_vulnwatch-verify.{record.DomainName}";
+            var txtValues = await dnsResolver.GetTxtRecords(txtHost, ct);
+
+            foreach (var value in txtValues)
+            {
+                logger.LogInformation(
+                    "Resolved TXT record for {Host}: {Value}",
+                    txtHost, value);
+            }
+
+            var expectedHash = record.VerificationToken;
+            var matchFound = txtValues.Any(v =>
+            {
+                var hash = Convert.ToBase64String(
+                    SHA256.HashData(Encoding.UTF8.GetBytes(v)));
+                return hash == expectedHash;
+            });
+
+            if (!matchFound)
+                return Result<VerifyDomainResponse>.Success(
+                    new VerifyDomainResponse(
+                        Status: VerificationStatus.Pending,
+                        Message: "TXT record not found yet — DNS may still be propagating."));
         }
-
-        var expectedHash = record.VerificationToken;
-        // var matchFound = txtValues.Any(v =>
-        // {
-        //     var hash = Convert.ToBase64String(
-        //         SHA256.HashData(Encoding.UTF8.GetBytes(v)));
-        //     return hash == expectedHash;
-        // });
-
-        // if (!matchFound)
-        // {
-        //     return Result<VerifyDomainResponse>.Success(
-        //         new VerifyDomainResponse(
-        //             Status: VerificationStatus.Pending,
-        //             Message: "TXT record not found yet — DNS may still be propagating."));
-        // }
+        else
+        {
+            logger.LogWarning(
+                "DNS lookup bypassed for domain {DomainId} — Dns:Lookup is disabled.",
+                cmd.DomainId);
+        }
 
         record.Verify();
         await domains.SaveChangesAsync(ct);
 
         return Result<VerifyDomainResponse>.Success(
-            new VerifyDomainResponse(Status: VerificationStatus.Verified, "Domain Verified Successfully!"));
+            new VerifyDomainResponse(
+                Status: VerificationStatus.Verified,
+                Message: "Domain verified successfully."));
     }
-
 }

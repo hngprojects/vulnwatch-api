@@ -153,6 +153,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+
+
 // Redis
 var redisConfig = builder.Configuration.GetValue<string>("Redis:Configuration") ?? "localhost:6379";
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
@@ -197,7 +199,9 @@ var corsSettings = builder.Configuration
     .GetSection("Cors")
     .Get<CorsOptions>();
 
-if (corsSettings?.AllowedOrigins is null || corsSettings.AllowedOrigins.Length == 0)
+if (corsSettings?.AllowedOrigins is null ||
+    corsSettings.AllowedOrigins.Length == 0 ||
+    corsSettings.AllowedOrigins.Any(o => string.IsNullOrWhiteSpace(o)))
 {
     throw new InvalidOperationException("CORS AllowedOrigins is not configured.");
 }
@@ -245,8 +249,8 @@ app.UseHttpsRedirection();
 app.UseCors("DefaultCors");
 app.UseAuthentication();
 app.UseMiddleware<JwtMiddleware>();
-app.UseAuthorization();
 app.UseRateLimiter();
+app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {

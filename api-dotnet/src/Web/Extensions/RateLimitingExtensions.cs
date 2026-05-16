@@ -13,12 +13,44 @@ public class RateLimitConfig
     public PolicyConfig Auth { get; set; } = new();
     public PolicyConfig General { get; set; } = new();
 
+    public class PolicyConfigValidator : IValidateOptions<RateLimitConfig>
+    {
+        public ValidateOptionsResult Validate(string? name, RateLimitConfig options)
+        {
+            var failures = new List<string>();
+
+            ValidatePolicy("RateLimit:Auth", options.Auth, failures);
+            ValidatePolicy("RateLimit:General", options.General, failures);
+
+            return failures.Count > 0
+                ? ValidateOptionsResult.Fail(failures)
+                : ValidateOptionsResult.Success;
+        }
+
+        private static void ValidatePolicy(string prefix, RateLimitConfig.PolicyConfig policy, List<string> failures)
+        {
+            if (policy.PermitLimit <= 0)
+                failures.Add($"{prefix}.PermitLimit must be greater than 0. Got: {policy.PermitLimit}");
+
+            if (policy.PermitLimit > 10_000)
+                failures.Add($"{prefix}.PermitLimit must not exceed 10,000. Got: {policy.PermitLimit}");
+
+            if (policy.WindowSeconds <= 0)
+                failures.Add($"{prefix}.WindowSeconds must be greater than 0. Got: {policy.WindowSeconds}");
+
+            if (policy.WindowSeconds > 3600)
+                failures.Add($"{prefix}.WindowSeconds must not exceed 3600 (1 hour). Got: {policy.WindowSeconds}");
+        }
+    }
+
     public class PolicyConfig
     {
         public int PermitLimit { get; set; } = 10;
         public int WindowSeconds { get; set; } = 60;
     }
 }
+
+
 public static class RateLimitExtensions
 {
     public const string AuthPolicy = "auth-limit";
@@ -28,10 +60,15 @@ public static class RateLimitExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        services.AddSingleton<IValidateOptions<RateLimitConfig>, RateLimitConfig.PolicyConfigValidator>();
+        services.AddOptions<RateLimitConfig>()
+            .Bind(configuration.GetSection(RateLimitConfig.SectionName))
+            .ValidateOnStart();
+
         var config = configuration
             .GetSection(RateLimitConfig.SectionName)
             .Get<RateLimitConfig>() ?? new RateLimitConfig();
-
+     
         services.Configure<RateLimitConfig>(
             configuration.GetSection(RateLimitConfig.SectionName));
 
@@ -45,7 +82,7 @@ public static class RateLimitExtensions
                 response.ContentType = "application/json";
 
                 if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
-                    response.Headers.RetryAfter = ((int)retryAfter.TotalSeconds).ToString();
+                    response.Headers.RetryAfter = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds)).ToString();
 
                 var jsonOptions = context.HttpContext.RequestServices
                     .GetRequiredService<IOptions<JsonOptions>>()
