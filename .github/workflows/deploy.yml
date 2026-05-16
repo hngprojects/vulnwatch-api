@@ -1,15 +1,16 @@
 name: Build and Deploy
 
 on:
-  push:
+  pull_request:
     branches: [staging, main]
+    types: [closed]
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   deploy:
-    if: github.event.repository.fork == false
+    if: github.event.pull_request.merged == true && github.event.repository.fork == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
