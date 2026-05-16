@@ -9,6 +9,14 @@ namespace Infrastructure.Persistence.Repositories;
 public sealed class DomainRepository(VulnWatchDbContext db)
     : BaseRepository<ScannedDomain>(db), IDomainRepository
 {
+   public Task<ScannedDomain?> GetById(Guid domainId, CancellationToken ct = default) => 
+        Db.Domains
+            .FirstOrDefaultAsync(d => d.Id == domainId, ct);
+    
+
+    public Task<ScannedDomain?> FindUserDomainById(Guid userId, Guid domainId, CancellationToken ct) => 
+        Db.Domains
+            .FirstOrDefaultAsync(d => d.Id == domainId && d.UserId == userId, ct);
     public Task<ScannedDomain?> FindActive(string domain, CancellationToken ct) =>
         Db.Domains
             .FirstOrDefaultAsync(d =>

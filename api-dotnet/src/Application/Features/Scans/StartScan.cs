@@ -93,7 +93,7 @@ public class StartScanHandler : IRequestHandler<StartScanCommand, Result<StartSc
             );
 
             await _scanRepo.AddAsync(scan, ct);
-            await _context.SaveChangesAsync(ct);
+            await _scanRepo.SaveChangesAsync(ct);
 
             await tx.CommitAsync(ct);
 

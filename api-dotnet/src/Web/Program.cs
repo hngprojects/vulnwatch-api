@@ -22,6 +22,7 @@ using Web.Services;
 using MediatR;
 using Application.Behaviours;
 using DnsClient;
+using Web.Configurations;
 
 LoadDotEnv();
 
@@ -152,6 +153,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+
+
 // Redis
 var redisConfig = builder.Configuration.GetValue<string>("Redis:Configuration") ?? "localhost:6379";
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
@@ -192,6 +195,32 @@ builder.Services.AddSingleton<LookupClient>(_ =>
             );
 builder.Services.AddScoped<IDnsResolver, DnsResolver>();
 
+var corsSettings = builder.Configuration
+    .GetSection("Cors")
+    .Get<CorsOptions>();
+
+if (corsSettings?.AllowedOrigins is null ||
+    corsSettings.AllowedOrigins.Length == 0 ||
+    corsSettings.AllowedOrigins.Any(o => string.IsNullOrWhiteSpace(o)))
+{
+    throw new InvalidOperationException("CORS AllowedOrigins is not configured.");
+}
+
+builder.Services.AddCors(options =>
+{
+
+    options.AddPolicy("DefaultCors", policy =>
+    {
+        policy
+            .WithOrigins(corsSettings.AllowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
+
+builder.Services.AddAppRateLimiting(builder.Configuration);
+
 builder.Services.AddHealthChecks()
     .AddNpgSql(
         connectionString,
@@ -216,12 +245,11 @@ app.UseSwaggerUI(options =>
     options.SwaggerEndpoint("/swagger/v1/swagger.json", "v1");
     options.RoutePrefix = "docs";
 });
-
 app.UseHttpsRedirection();
+app.UseCors("DefaultCors");
 app.UseAuthentication();
-
 app.UseMiddleware<JwtMiddleware>();
-
+app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions

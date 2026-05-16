@@ -1,0 +1,30 @@
+using Domain.Enums;
+using Domain.Common;
+using MediatR;
+using Application.Interfaces;
+using Application.Features.Domain.DTOs;
+using Microsoft.AspNetCore.Http;
+
+namespace Application.Features.Domain;
+public record GetDomainByIdQuery(Guid DomainId) : IRequest<Result<DomainSummary>>;
+
+public class GetDomainByIdHandler(
+    IDomainRepository domains,
+    ICurrentUser currentUser)
+    : IRequestHandler<GetDomainByIdQuery, Result<DomainSummary>>
+{
+    public async Task<Result<DomainSummary>> Handle(GetDomainByIdQuery query, CancellationToken ct)
+    {
+        var domain = await domains.FindUserDomainById(currentUser.UserId, query.DomainId, ct);
+
+        if (domain is null)
+            return Result<DomainSummary>.Failure(Error.NotFound("Domain not found."));
+
+        return Result<DomainSummary>.Success(new DomainSummary(
+            domain.Id,
+            domain.DomainName,
+            domain.VerificationStatus,
+            domain.CreatedAt,
+            domain.UpdatedAt));
+    }
+}
