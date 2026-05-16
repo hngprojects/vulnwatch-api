@@ -16,6 +16,7 @@ namespace Web.Controllers;
  * Intern-friendly: This is the entry point for the API.
  */
 [EnableRateLimiting(RateLimitExtensions.GeneralPolicy)]
+[Authorize]   
 [ApiController]
 [Route("api/[controller]")]
 public class ScansController : ControllerBase
@@ -38,7 +39,6 @@ public class ScansController : ControllerBase
     }
 
     [HttpGet("{domainId:guid}/history")]
-    [Authorize]
     public async Task<ActionResult<Result<PagedResult<ScanSummary>>>> GetScanHistory(Guid domainId, [FromQuery] GetScanHistoryRequest request, CancellationToken ct)
     {
         var query = new GetScanHistoryQuery(domainId, request.Status, request.Coverage,

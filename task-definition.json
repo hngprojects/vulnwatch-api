@@ -97,7 +97,7 @@
         },
         {
           "name": "RateLimit__Auth__PermitLimit",
-          "value": 10
+          "value": "10"
         },
         {
           "name": "RateLimit__Auth__WindowSeconds",
