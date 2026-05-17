@@ -201,6 +201,24 @@
 			<artifactId>mockito-core</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<!-- Source: https://mvnrepository.com/artifact/dnsjava/dnsjava -->
+		<dependency>
+			<groupId>dnsjava</groupId>
+			<artifactId>dnsjava</artifactId>
+			<version>3.6.4</version>
+			<scope>compile</scope>
+		</dependency>
+		<!-- Source: https://mvnrepository.com/artifact/com.maxmind.geoip2/geoip2 -->
+		<dependency>
+			<groupId>com.maxmind.geoip2</groupId>
+			<artifactId>geoip2</artifactId>
+			<version>5.0.2</version>
+			<scope>compile</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.mockito</groupId>
 			<artifactId>mockito-inline</artifactId>
