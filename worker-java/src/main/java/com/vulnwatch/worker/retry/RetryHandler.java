@@ -1,5 +1,6 @@
 package com.vulnwatch.worker.retry;
 
+import com.vulnwatch.worker.state.RedisSurfaceStateManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -13,6 +14,8 @@ public class RetryHandler {
 
     private final RedisTemplate<Object, Object> redisTemplate;
     private final RetryPolicyFactory retryPolicyFactory;
+    private final RedisSurfaceStateManager stateManager;
+    private final DeadLetterQueueHandler deadLetterQueueHandler;
 
     private static final String RETRY_KEY = "scan:retry";
     private static final String DLQ_KEY = "dlq:scan";
@@ -22,14 +25,13 @@ public class RetryHandler {
         RetryPolicyFactory.RetryPolicy policy =
                 retryPolicyFactory.getPolicy(task.getSurface());
 
-        int nextRetry = task.getRetryCount() + 1;
+        int nextRetry = stateManager.incrementRetryCount();
 
         // max retry check
         if (nextRetry > policy.getMaxRetries()) {
-            moveToDLQ(task);
+            deadLetterQueueHandler.pushToDLQ(task);
             return;
         }
-
 
         long delay = policy.getBaseDelayMs() * (long) Math.pow(2, nextRetry - 1);
         long score = Instant.now().toEpochMilli() + delay;
@@ -42,8 +44,8 @@ public class RetryHandler {
         );
     }
 
-    private void moveToDLQ(ScanTask task) {
-        redisTemplate.opsForList()
-                .leftPush(DLQ_KEY, jsonUtil.toJson(task));
-    }
+//    private void moveToDLQ(ScanTask task) {
+//        redisTemplate.opsForList()
+//                .leftPush(DLQ_KEY, jsonUtil.toJson(task));
+//    }
 }

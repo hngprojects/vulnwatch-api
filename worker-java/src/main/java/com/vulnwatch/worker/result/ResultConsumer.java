@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vulnwatch.worker.ai.AiEnricher;
 import com.vulnwatch.worker.models.AggregatedScanData;
 import com.vulnwatch.worker.repository.FindingRepository;
+import com.vulnwatch.worker.retry.RetryHandler;
+import com.vulnwatch.worker.state.RedisSurfaceStateManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,6 +30,8 @@ public class ResultConsumer {
     private final ObjectMapper objectMapper;
     private final AiEnricher aiEnricher;
     private final FindingRepository findingRepository;
+    private final RedisSurfaceStateManager stateManager;
+    private final RetryHandler retryHandler;
 
     @Value("${redis.stream.surface-results:surface:result:stream}")
     private String streamKey;
@@ -165,7 +169,8 @@ public class ResultConsumer {
              * Replace with DB persistence later
              */
 
-            findingRepository.save()
+            findingRepository.save();
+            stateManager.updateSuccess();
 
 
             /*
@@ -190,15 +195,9 @@ public class ResultConsumer {
                     messageId,
                     e
             );
+            stateManager.updateFailure();
+            retryHandler.handleFailure();
 
-            /*
-             * DO NOT ACK
-             *
-             * Message stays pending.
-             *
-             * Can later recover using:
-             * XAUTOCLAIM
-             */
         }
     }
 
