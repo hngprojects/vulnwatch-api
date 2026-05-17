@@ -23,7 +23,7 @@ import java.util.Map;
 public class RedisConfig {
 
   public static final class Keys {
-    public static final String SCAN_QUEUE = "scan:queue";
+    public static final String SCAN_QUEUE = "scan-jobs";
     public static final String SURFACE_RESULT_STREAM = "surface:result:stream";
     public static final String RETRY_ZSET = "scan:retry";
     public static final String DEAD_LETTER_LIST = "scan:dead-letter";
