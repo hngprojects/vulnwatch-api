@@ -70,6 +70,10 @@ public class Scan {
     this.completedAt = Instant.now();
   }
 
+  public boolean isTerminal() {
+    return status == ScanStatus.FAILED || status == ScanStatus.COMPLETED;
+  }
+
   public void markFailed() {
     this.status = ScanStatus.FAILED;
     this.completedAt = Instant.now();
