@@ -80,10 +80,10 @@ public class RedisResultPublisher {
   private void publish(ScanResultMessage message) {
     try {
       String json = objectMapper.writeValueAsString(message);
-      redisTemplate.opsForList().leftPush(RedisConfig.SCAN_RESULTS_QUEUE, json);
+      redisTemplate.opsForList().leftPush(RedisConfig.Keys.SCAN_QUEUE, json);
       log.info(
           "Published to {}: scanId={}, status={}, score={}, findings={}",
-          RedisConfig.SCAN_RESULTS_QUEUE,
+          RedisConfig.Keys.SCAN_QUEUE,
           message.getScanId(),
           message.getStatus(),
           message.getSecurityScore(),

@@ -96,7 +96,7 @@ public class RedisSurfaceStateManager implements SurfaceStateManager {
         return state;
     }
 
-    // ── Status updates ────────────────────────────────────────────────────────
+
 
     @Override
     public void updateSuccess(UUID scanId, SurfaceType surface) {
