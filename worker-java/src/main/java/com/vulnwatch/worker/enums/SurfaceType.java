@@ -31,7 +31,7 @@ public enum SurfaceType {
    * @return The matching SurfaceType
    * @throws InvalidSurfaceTypeException if no match is found
    */
-  public static SurfaceType fromString(String value) throws InvalidSurfaceTypeException {
+  public static SurfaceType fromString(String value){
     if (value == null) {
       throw new InvalidSurfaceTypeException("Surface type cannot be null");
     }
