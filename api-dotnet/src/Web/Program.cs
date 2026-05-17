@@ -24,13 +24,27 @@ using Application.Behaviours;
 using DnsClient;
 using Web.Configurations;
 using Web.Hubs;
+using Serilog;
 
 LoadDotEnv();
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Logging.ClearProviders();
-builder.Logging.AddConsole();
+builder.Host.UseSerilog((ctx, config) =>
+{
+    config
+        .MinimumLevel.Information()
+        .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
+        .MinimumLevel.Override("Microsoft.EntityFrameworkCore", Serilog.Events.LogEventLevel.Warning)
+        .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+        .MinimumLevel.Override("StackExchange.Redis", Serilog.Events.LogEventLevel.Warning)
+        .Enrich.FromLogContext()
+        .Enrich.WithMachineName()
+        .Enrich.WithProcessId()
+        .Enrich.WithThreadId()
+        .WriteTo.Console(
+            outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}");
+});
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -196,7 +210,7 @@ builder.Services.AddSingleton<LookupClient>(_ =>
             );
 builder.Services.AddScoped<IDnsResolver, DnsResolver>();
 builder.Services.AddSignalR();
-builder.Services.AddHostedService<ScanResultConsumer>();
+// builder.Services.AddHostedService<ScanResultConsumer>();
 
 var corsSettings = builder.Configuration
     .GetSection("Cors")
@@ -250,6 +264,7 @@ app.UseSwaggerUI(options =>
 });
 app.UseHttpsRedirection();
 app.UseCors("DefaultCors");
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthentication();
 app.UseMiddleware<JwtMiddleware>();
 app.UseRateLimiter();
