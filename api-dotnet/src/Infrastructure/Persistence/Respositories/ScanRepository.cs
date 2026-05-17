@@ -23,38 +23,38 @@ public sealed class ScanRepository(VulnWatchDbContext db)
                 (s.Status == ScanStatus.Queued || s.Status == ScanStatus.Running), ct);
 
     public async Task<(List<Scan> Items, int TotalCount)> GetPaged(ScanFilter filter, CancellationToken ct)
-{
-    var query = Db.Scans
-        .Include(s => s.Domain)
-        .Where(s => s.UserId == filter.UserId);
-
-    if (filter.DomainId.HasValue)
-        query = query.Where(s => s.DomainId == filter.DomainId.Value);
-
-    if (filter.Status.HasValue)
-        query = query.Where(s => s.Status == filter.Status.Value);
-
-    if (filter.Coverage.HasValue)
-        query = query.Where(s => s.Coverage == filter.Coverage.Value);
-
-    query = (filter.SortBy, filter.Order) switch
     {
-        ("created_at", "asc")  => query.OrderBy(s => s.CreatedAt),
-        ("created_at", "desc") => query.OrderByDescending(s => s.CreatedAt),
-        ("status", "asc")      => query.OrderBy(s => s.Status),
-        ("status", "desc")     => query.OrderByDescending(s => s.Status),
-        _                      => query.OrderByDescending(s => s.CreatedAt)
-    };
+        var query = Db.Scans
+            .Include(s => s.Domain)
+            .Where(s => s.UserId == filter.UserId);
 
-    var totalCount = await query.CountAsync(ct);
+        if (filter.DomainId.HasValue)
+            query = query.Where(s => s.DomainId == filter.DomainId.Value);
 
-    var items = await query
-        .Skip((filter.Page - 1) * filter.PageSize)
-        .Take(filter.PageSize)
-        .ToListAsync(ct);
+        if (filter.Status.HasValue)
+            query = query.Where(s => s.Status == filter.Status.Value);
 
-    return (items, totalCount);
-}
+        if (filter.Coverage.HasValue)
+            query = query.Where(s => s.Coverage == filter.Coverage.Value);
+
+        query = (filter.SortBy, filter.Order) switch
+        {
+            ("created_at", "asc") => query.OrderBy(s => s.CreatedAt),
+            ("created_at", "desc") => query.OrderByDescending(s => s.CreatedAt),
+            ("status", "asc") => query.OrderBy(s => s.Status),
+            ("status", "desc") => query.OrderByDescending(s => s.Status),
+            _ => query.OrderByDescending(s => s.CreatedAt)
+        };
+
+        var totalCount = await query.CountAsync(ct);
+
+        var items = await query
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToListAsync(ct);
+
+        return (items, totalCount);
+    }
 
 }
 
