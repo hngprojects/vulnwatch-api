@@ -15,7 +15,7 @@ public record ScanSummary(
     DateTime CreatedAt,
     DateTime? CompletedAt);
 
-public record GetScanHistoryQuery(Guid DomainId, ScanStatus? Status, ScanCoverage? Coverage,  string SortBy = "created_at",
+public record GetScanHistoryQuery(Guid DomainId, ScanStatus? Status, ScanCoverage? Coverage, string SortBy = "created_at",
     string Order = "asc", int Page = 1, int PageSize = 20)
     : IRequest<Result<PagedResult<ScanSummary>>>;
 
@@ -40,11 +40,11 @@ public class GetScanHistoryHandler(
     {
         var userId = currentUser.UserId;
 
-        
-            var domain = await domainRepo.FindUserDomainById(userId, query.DomainId, ct);
-            if (domain is null)
-                return Result<PagedResult<ScanSummary>>.Failure(Error.NotFound("Domain not found."));
-        
+
+        var domain = await domainRepo.FindUserDomainById(userId, query.DomainId, ct);
+        if (domain is null)
+            return Result<PagedResult<ScanSummary>>.Failure(Error.NotFound("Domain not found."));
+
 
         var filter = new ScanFilter(
             UserId: userId,
@@ -61,7 +61,7 @@ public class GetScanHistoryHandler(
         var summaries = items.Select(s => new ScanSummary(
             s.Id,
             s.DomainId,
-            s.Domain?.DomainName ?? string.Empty,   
+            s.Domain?.DomainName ?? string.Empty,
             s.Status,
             s.Coverage,
             s.CreatedAt,

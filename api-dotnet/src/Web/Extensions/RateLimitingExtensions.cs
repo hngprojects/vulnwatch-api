@@ -68,7 +68,7 @@ public static class RateLimitExtensions
         var config = configuration
             .GetSection(RateLimitConfig.SectionName)
             .Get<RateLimitConfig>() ?? new RateLimitConfig();
-     
+
         services.Configure<RateLimitConfig>(
             configuration.GetSection(RateLimitConfig.SectionName));
 

@@ -23,6 +23,7 @@ using MediatR;
 using Application.Behaviours;
 using DnsClient;
 using Web.Configurations;
+using Web.Hubs;
 
 LoadDotEnv();
 
@@ -194,6 +195,8 @@ builder.Services.AddSingleton<LookupClient>(_ =>
                 )
             );
 builder.Services.AddScoped<IDnsResolver, DnsResolver>();
+builder.Services.AddSignalR();
+builder.Services.AddHostedService<ScanResultConsumer>();
 
 var corsSettings = builder.Configuration
     .GetSection("Cors")
@@ -252,6 +255,7 @@ app.UseMiddleware<JwtMiddleware>();
 app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<ScanHub>("/hubs/scans");
 app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     ResponseWriter = HealthResponse.WriteAsync

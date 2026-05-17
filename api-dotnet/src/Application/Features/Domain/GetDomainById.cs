@@ -20,11 +20,18 @@ public class GetDomainByIdHandler(
         if (domain is null)
             return Result<DomainSummary>.Failure(Error.NotFound("Domain not found."));
 
+        var latestScan = domain.Scans
+            .Where(s => s.Status == ScanStatus.Completed)
+            .OrderByDescending(s => s.CompletedAt)
+            .FirstOrDefault();
+
         return Result<DomainSummary>.Success(new DomainSummary(
             domain.Id,
             domain.DomainName,
             domain.VerificationStatus,
             domain.CreatedAt,
-            domain.UpdatedAt));
+            domain.UpdatedAt,
+            latestScan?.CompletedAt,
+            latestScan?.SecurityScore));
     }
 }
