@@ -16,7 +16,7 @@ namespace Web.Controllers;
  * Intern-friendly: This is the entry point for the API.
  */
 [EnableRateLimiting(RateLimitExtensions.GeneralPolicy)]
-[Authorize]   
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class ScansController : ControllerBase
