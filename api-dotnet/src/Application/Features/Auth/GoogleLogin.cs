@@ -15,6 +15,7 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
 {
     private readonly UserManager<User> _userManager;
     private readonly IRefreshTokenRepository _refreshTokenRepo;
+    private readonly INotificationPreferencesRepository _notifPrefs;
     private readonly IGoogleTokenVerifier _googleTokenVerifier;
     private readonly IJwtService _jwt;
     private readonly IConfiguration _config;
@@ -23,6 +24,7 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
     public GoogleLoginHandler(
         UserManager<User> userManager,
         IRefreshTokenRepository refreshTokenRepo,
+        INotificationPreferencesRepository notifPrefs,
         IGoogleTokenVerifier googleTokenVerifier,
         IJwtService jwt,
         IConfiguration config,
@@ -30,6 +32,7 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
     {
         _userManager = userManager;
         _refreshTokenRepo = refreshTokenRepo;
+        _notifPrefs = notifPrefs;
         _googleTokenVerifier = googleTokenVerifier;
         _jwt = jwt;
         _config = config;
@@ -66,6 +69,14 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
 
                 if (!createResult.Succeeded)
                     return Result<AuthResponse>.Failure(Error.Validation(createResult.Errors.First().Description));
+
+                var prefsExist = await _notifPrefs.ExistsForUser(user.Id, ct);
+                if (!prefsExist)
+                {
+                    var prefs = NotificationPreferences.Create(user.Id, emailAlerts: true);
+                    await _notifPrefs.AddAsync(prefs, ct);
+                    await _notifPrefs.SaveChangesAsync(ct);
+                }
             }
             else
             {

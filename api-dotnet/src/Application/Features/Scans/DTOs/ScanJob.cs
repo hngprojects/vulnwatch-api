@@ -1,5 +1,3 @@
-
-
 namespace Application.Features.Scans.DTOs;
 
 // Application/Features/Scans/DTOs/ScanJob.cs

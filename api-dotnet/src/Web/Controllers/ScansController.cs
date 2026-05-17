@@ -38,7 +38,7 @@ public class ScansController : ControllerBase
         return result.ToHttpResponse(this);
     }
 
-    [HttpGet("{domainId:guid}/history")]
+    [HttpGet("{domainId:guid}/domain")]
     public async Task<ActionResult<Result<PagedResult<ScanSummary>>>> GetScanHistory(Guid domainId, [FromQuery] GetScanHistoryRequest request, CancellationToken ct)
     {
         var query = new GetScanHistoryQuery(domainId, request.Status, request.Coverage,
@@ -47,5 +47,12 @@ public class ScansController : ControllerBase
         var result = await _mediator.Send(query, ct);
         return result.ToHttpResponse(this);
 
+    }
+
+    [HttpGet("{scanId:guid}/report")]
+    public async Task<ActionResult<Result<ScanReportDto>>> GetReport(Guid scanId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetScanReportQuery(scanId), ct);
+        return result.ToHttpResponse(this);
     }
 }

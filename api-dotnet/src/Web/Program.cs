@@ -25,6 +25,9 @@ using DnsClient;
 using Web.Configurations;
 using Web.Hubs;
 using Serilog;
+using Web.Workers;
+using Web.Consumers;
+using Application.Services;
 
 LoadDotEnv();
 
@@ -211,6 +214,11 @@ builder.Services.AddSingleton<LookupClient>(_ =>
 builder.Services.AddScoped<IDnsResolver, DnsResolver>();
 builder.Services.AddSignalR();
 // builder.Services.AddHostedService<ScanResultConsumer>();
+builder.Services.AddScoped<IAlertRepository, AlertRepository>();
+builder.Services.AddHostedService<AlertOutboxProcessor>();
+builder.Services.AddScoped<AlertDispatcher>();
+builder.Services.AddHostedService<SslExpiryChecker>();
+builder.Services.AddScoped<INotificationPreferencesRepository, NotificationPreferencesRepository>();
 
 var corsSettings = builder.Configuration
     .GetSection("Cors")

@@ -13,6 +13,7 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
         : base(options) { }
 
     // Users table is provided by IdentityDbContext
+    public DbSet<Alert> Alerts => Set<Alert>();
     public DbSet<Waitlist> Waitlists => Set<Waitlist>();
     public DbSet<ScannedDomain> Domains => Set<ScannedDomain>();
     public DbSet<Scan> Scans => Set<Scan>();

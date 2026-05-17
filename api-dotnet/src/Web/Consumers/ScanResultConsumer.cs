@@ -1,10 +1,13 @@
 using System.Text.Json;
 using Application.Interfaces;
+using Application.Services;
+using Domain.Enums;
+using Domain.Events;
 using Microsoft.AspNetCore.SignalR;
 using StackExchange.Redis;
 using Web.Hubs;
 
-namespace Web.Services;
+namespace Web.Consumers;
 
 public record ScanResultMessage(
     string ScanId,
@@ -28,15 +31,18 @@ public class ScanResultConsumer : BackgroundService
     private const string Queue = "scan-results";
     private readonly IConnectionMultiplexer _redis;
     private readonly IHubContext<ScanHub> _hub;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ScanResultConsumer> _logger;
 
     public ScanResultConsumer(
         IConnectionMultiplexer redis,
         IHubContext<ScanHub> hub,
+        IServiceScopeFactory scopeFactory,
         ILogger<ScanResultConsumer> logger)
     {
         _redis = redis;
         _hub = hub;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -72,6 +78,19 @@ public class ScanResultConsumer : BackgroundService
                 await _hub.Clients
                     .Group($"user:{message.RequestedBy}")
                     .SendAsync("ScanCompleted", message, ct);
+
+                using var scope = _scopeFactory.CreateScope();
+                var dispatcher = scope.ServiceProvider.GetRequiredService<AlertDispatcher>();
+
+                await dispatcher.DispatchAsync(new ScanCompletedEvent(
+                    ScanId: Guid.Parse(message.ScanId),
+                    DomainId: Guid.Parse(message.DomainId),
+                    UserId: Guid.Parse(message.RequestedBy),
+                    DomainName: message.DomainName,
+                    SecurityScore: message.SecurityScore,
+                    FindingSeverities: message.Findings
+                        .Select(f => Enum.Parse<FindingSeverity>(f.Severity))
+                        .ToList()), ct);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
