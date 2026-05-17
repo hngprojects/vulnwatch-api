@@ -16,12 +16,12 @@ public record RegisterDomainCommand(string Domain) : IRequest<Result<RegisterDom
 
 public class RegisterDomainHandler : IRequestHandler<RegisterDomainCommand, Result<RegisterDomainResponse>>
 {
-    private readonly IScannedDomainRepository _domains;
+    private readonly IDomainRepository _domains;
     private readonly ICurrentUser _currentUser;
     private readonly ITokenService _token;
     private readonly ILogger<RegisterDomainHandler> _logger;
 
-    public RegisterDomainHandler(IScannedDomainRepository domains, ICurrentUser currentUser, ITokenService token, ILogger<RegisterDomainHandler> logger)
+    public RegisterDomainHandler(IDomainRepository domains, ICurrentUser currentUser, ITokenService token, ILogger<RegisterDomainHandler> logger)
     {
         _domains = domains;
         _currentUser = currentUser;

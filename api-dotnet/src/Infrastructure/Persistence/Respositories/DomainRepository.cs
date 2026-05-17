@@ -6,14 +6,38 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Persistence.Repositories;
 
-public sealed class ScannedDomainRepository(VulnWatchDbContext db)
-    : BaseRepository<ScannedDomain>(db), IScannedDomainRepository
+public sealed class DomainRepository(VulnWatchDbContext db)
+    : BaseRepository<ScannedDomain>(db), IDomainRepository
 {
+    public Task<ScannedDomain?> GetById(Guid domainId, CancellationToken ct = default) =>
+         Db.Domains
+             .FirstOrDefaultAsync(d => d.Id == domainId, ct);
+
+    public Task<ScannedDomain?> FindUserDomainById(Guid userId, Guid domainId, CancellationToken ct) =>
+        Db.Domains
+            .Include(d => d.Scans
+                .Where(s => s.Status == ScanStatus.Completed)
+                .OrderByDescending(s => s.CompletedAt)
+                .Take(1))
+            .FirstOrDefaultAsync(d => d.Id == domainId && d.UserId == userId, ct);
     public Task<ScannedDomain?> FindActive(string domain, CancellationToken ct) =>
         Db.Domains
             .FirstOrDefaultAsync(d =>
                 d.DomainName == domain &&
                 d.VerificationStatus != VerificationStatus.Revoked, ct);
+
+    public Task<ScannedDomain?> FindUserDomainByName(Guid userId, string domain, CancellationToken ct) =>
+        Db.Domains
+        .FirstOrDefaultAsync(d =>
+        d.UserId == userId &&
+        d.DomainName == domain, ct);
+
+    public Task<ScannedDomain?> FindUserVerifiedDomainByName(Guid userId, string domain, CancellationToken ct) =>
+        Db.Domains
+        .FirstOrDefaultAsync(d =>
+        d.UserId == userId &&
+        d.DomainName == domain &&
+        d.VerificationStatus == VerificationStatus.Verified, ct);
 
     public Task<int> CountPending(Guid userId, CancellationToken ct) =>
         Db.Domains
@@ -36,10 +60,9 @@ public sealed class ScannedDomainRepository(VulnWatchDbContext db)
 
     public async Task<(IReadOnlyList<ScannedDomain>, int)> GetPaged(DomainFilter filter, CancellationToken ct = default)
     {
-        var query = Db.Domains.AsNoTracking().AsQueryable();
-
-        query = query
-              .Where(d => d.UserId == filter.UserId);
+        var query = Db.Domains
+            .AsNoTracking()
+            .Where(d => d.UserId == filter.UserId);
 
         if (!string.IsNullOrWhiteSpace(filter.Search))
             query = query.Where(d => d.DomainName.Contains(filter.Search));
@@ -59,10 +82,13 @@ public sealed class ScannedDomainRepository(VulnWatchDbContext db)
             _ => query.OrderBy(p => p.CreatedAt),
         };
 
-
         var items = await query
             .Skip((filter.Page - 1) * filter.PageSize)
             .Take(filter.PageSize)
+            .Include(d => d.Scans
+                .Where(s => s.Status == ScanStatus.Completed)
+                .OrderByDescending(s => s.CompletedAt)
+                .Take(1))
             .ToListAsync(ct);
 
         return (items, totalCount);

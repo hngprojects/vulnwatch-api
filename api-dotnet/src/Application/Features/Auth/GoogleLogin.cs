@@ -4,6 +4,8 @@ using Domain.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Features.Auth;
 
@@ -12,17 +14,26 @@ public record GoogleLoginCommand(string IdToken) : IRequest<Result<AuthResponse>
 public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<AuthResponse>>
 {
     private readonly UserManager<User> _userManager;
+    private readonly IRefreshTokenRepository _refreshTokenRepo;
     private readonly IGoogleTokenVerifier _googleTokenVerifier;
     private readonly IJwtService _jwt;
+    private readonly IConfiguration _config;
+    private readonly ILogger<GoogleLoginHandler> _logger;
 
     public GoogleLoginHandler(
         UserManager<User> userManager,
+        IRefreshTokenRepository refreshTokenRepo,
         IGoogleTokenVerifier googleTokenVerifier,
-        IJwtService jwt)
+        IJwtService jwt,
+        IConfiguration config,
+        ILogger<GoogleLoginHandler> logger)
     {
         _userManager = userManager;
+        _refreshTokenRepo = refreshTokenRepo;
         _googleTokenVerifier = googleTokenVerifier;
         _jwt = jwt;
+        _config = config;
+        _logger = logger;
     }
 
     public async Task<Result<AuthResponse>> Handle(GoogleLoginCommand cmd, CancellationToken ct)
@@ -47,7 +58,10 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
 
             if (user is null)
             {
-                user = User.CreateFromGoogle(googleUser.Email, googleUser.Subject);
+                _logger.LogInformation("GOOGLE USER: {link}", googleUser);
+
+                // user = User.CreateFromGoogle(googleUser.Email, googleUser.Subject);
+                user = User.CreateFromGoogle(googleUser.Email, googleUser.Subject, googleUser.Name, googleUser.Picture);
                 var createResult = await _userManager.CreateAsync(user);
 
                 if (!createResult.Succeeded)
@@ -84,7 +98,15 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
             }
         }
 
-        var token = _jwt.GenerateToken(user);
-        return Result<AuthResponse>.Success(AuthResponse.Create(token, user));
+        var accessToken = _jwt.GenerateToken(user);
+        var refreshToken = _jwt.GenerateRefreshToken();
+
+        var refreshTokenExpiryInDays = DateTime.UtcNow.AddMinutes(int.Parse(_config["Jwt:RefreshTokenExpiryDays"]!));
+
+        await _refreshTokenRepo.AddAsync(
+                RefreshToken.Create(user.Id, refreshToken, refreshTokenExpiryInDays),
+                ct);
+        await _refreshTokenRepo.SaveChangesAsync(ct);
+        return Result<AuthResponse>.Success(AuthResponse.Create(accessToken, refreshToken));
     }
 }

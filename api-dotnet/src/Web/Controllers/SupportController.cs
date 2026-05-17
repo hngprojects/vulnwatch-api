@@ -5,9 +5,12 @@ using Application.Features.Support.DTOs;
 using Domain.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Web.Extensions;
 
 namespace Web.Controllers;
+
+[EnableRateLimiting(RateLimitExtensions.GeneralPolicy)]
 
 [ApiController]
 [Route("api/[controller]")]
