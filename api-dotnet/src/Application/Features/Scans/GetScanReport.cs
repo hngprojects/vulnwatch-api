@@ -114,18 +114,19 @@ public class GetScanReportHandler(
 
     private static SubScoreItem ScoreFromFindings(List<Finding> findings, string label)
     {
-        if (!findings.Any())
-            return new SubScoreItem(100, "Pass", $"No {label} issues found.");
+        var openFindings = findings.Where(f => f.Status == FindingStatus.Open).ToList();
+        if (!openFindings.Any())
+            return new SubScoreItem(100, "Pass", $"No open {label} issues found.");
 
-        var hasCritical = findings.Any(f => f.Severity == FindingSeverity.Critical);
-        var hasHigh = findings.Any(f => f.Severity == FindingSeverity.High);
+        var hasCritical = openFindings.Any(f => f.Severity == FindingSeverity.Critical);
+        var hasHigh = openFindings.Any(f => f.Severity == FindingSeverity.High);
 
-        var score = hasCritical ? Random.Shared.Next(30, 50)
-                  : hasHigh ? Random.Shared.Next(55, 70)
-                  : Random.Shared.Next(75, 85);
+        var score = hasCritical ? 40
+                  : hasHigh    ? 65
+                  :              85;
 
         var status = hasCritical ? "Critical" : hasHigh ? "Warning" : "Pass";
-        var detail = findings.First().Title;
+        var detail = openFindings.First().Title;
 
         return new SubScoreItem(score, status, detail);
     }

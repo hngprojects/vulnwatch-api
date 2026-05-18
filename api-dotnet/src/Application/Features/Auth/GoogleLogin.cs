@@ -4,6 +4,7 @@ using Domain.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -61,22 +62,13 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
 
             if (user is null)
             {
-                _logger.LogInformation("GOOGLE USER: {link}", googleUser);
-
-                // user = User.CreateFromGoogle(googleUser.Email, googleUser.Subject);
                 user = User.CreateFromGoogle(googleUser.Email, googleUser.Subject, googleUser.Name, googleUser.Picture);
                 var createResult = await _userManager.CreateAsync(user);
 
                 if (!createResult.Succeeded)
                     return Result<AuthResponse>.Failure(Error.Validation(createResult.Errors.First().Description));
 
-                var prefsExist = await _notifPrefs.ExistsForUser(user.Id, ct);
-                if (!prefsExist)
-                {
-                    var prefs = NotificationPreferences.Create(user.Id, emailAlerts: true);
-                    await _notifPrefs.AddAsync(prefs, ct);
-                    await _notifPrefs.SaveChangesAsync(ct);
-                }
+                await TryCreateDefaultPrefsAsync(user.Id, ct);
             }
             else
             {
@@ -111,13 +103,32 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
 
         var accessToken = _jwt.GenerateToken(user);
         var refreshToken = _jwt.GenerateRefreshToken();
+        var expireDays = int.Parse(_config["Jwt:RefreshTokenExpiryDays"] ?? "7")!;
 
-        var refreshTokenExpiryInDays = DateTime.UtcNow.AddMinutes(int.Parse(_config["Jwt:RefreshTokenExpiryDays"]!));
+        var refreshTokenExpiryInDays = DateTime.UtcNow.AddDays(expireDays);
 
         await _refreshTokenRepo.AddAsync(
-                RefreshToken.Create(user.Id, refreshToken, refreshTokenExpiryInDays),
-                ct);
+            RefreshToken.Create(user.Id, refreshToken, refreshTokenExpiryInDays),
+            ct);
         await _refreshTokenRepo.SaveChangesAsync(ct);
+
         return Result<AuthResponse>.Success(AuthResponse.Create(accessToken, refreshToken));
+    }
+
+    private async Task TryCreateDefaultPrefsAsync(Guid userId, CancellationToken ct)
+    {
+        try
+        {
+            var prefs = NotificationPreferences.Create(userId, emailAlerts: true);
+            await _notifPrefs.AddAsync(prefs, ct);
+            await _notifPrefs.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex)
+            when (ex.InnerException?.GetType().FullName == "Npgsql.PostgresException" &&
+                  ex.InnerException.GetType().GetProperty("SqlState")?.GetValue(ex.InnerException) as string == "23505")
+        {
+            // Unique constraint on UserId — concurrent insert already seeded prefs.
+            // The user has default preferences either way; swallow and continue.
+        }
     }
 }

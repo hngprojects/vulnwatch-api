@@ -74,23 +74,42 @@ public class ScanResultConsumer : BackgroundService
 
                 _logger.LogInformation("Scan result received for {ScanId}", message.ScanId);
 
-                // emit to the user's SignalR group
+                //1. emit to the user's webhook
                 await _hub.Clients
                     .Group($"user:{message.RequestedBy}")
                     .SendAsync("ScanCompleted", message, ct);
 
+                if (!Guid.TryParse(message.ScanId, out var scanId) ||
+                 !Guid.TryParse(message.DomainId, out var domainId) ||
+                 !Guid.TryParse(message.RequestedBy, out var userId))
+                {
+                    _logger.LogWarning("Invalid scan-result payload IDs. ScanId={ScanId}", message.ScanId);
+                    continue;
+                }
+
+                var severities = new List<FindingSeverity>();
+                foreach (var finding in message.Findings)
+                {
+                    if (!Enum.TryParse<FindingSeverity>(finding.Severity, ignoreCase: true, out var sev))
+                    {
+                        _logger.LogWarning("Invalid finding severity '{Severity}' for scan {ScanId}", finding.Severity, scanId);
+                        continue;
+                    }
+                    severities.Add(sev);
+                }
+
+                //2. Dispatch Alerts
                 using var scope = _scopeFactory.CreateScope();
                 var dispatcher = scope.ServiceProvider.GetRequiredService<AlertDispatcher>();
 
                 await dispatcher.DispatchAsync(new ScanCompletedEvent(
-                    ScanId: Guid.Parse(message.ScanId),
-                    DomainId: Guid.Parse(message.DomainId),
-                    UserId: Guid.Parse(message.RequestedBy),
+                    ScanId: scanId,
+                    DomainId: domainId,
+                    UserId: userId,
                     DomainName: message.DomainName,
                     SecurityScore: message.SecurityScore,
-                    FindingSeverities: message.Findings
-                        .Select(f => Enum.Parse<FindingSeverity>(f.Severity))
-                        .ToList()), ct);
+                   FindingSeverities: severities), ct);
+
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {

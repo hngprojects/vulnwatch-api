@@ -1,6 +1,7 @@
 using Domain.Enums;
 
 namespace Domain.Entities;
+
 public class Alert : EntityBase
 {
     public Guid UserId { get; private set; }
@@ -19,25 +20,33 @@ public class Alert : EntityBase
     private Alert() { }
 
     public static Alert Create(
-        Guid userId,
-        AlertType type,
-        AlertChannel channel,
-        AlertSeverity severity,
-        string deduplicationKey,
-        string subject,
-        string body,
-        Guid? domainId = null) => new()
+          Guid userId,
+          AlertType type,
+          AlertChannel channel,
+          AlertSeverity severity,
+          string deduplicationKey,
+          string subject,
+          string body,
+          Guid? domainId = null)
     {
-        UserId = userId,
-        DomainId = domainId,
-        Type = type,
-        Channel = channel,
-        Severity = severity,
-        DeduplicationKey = deduplicationKey,
-        Subject = subject,
-        Body = body,
-        Status = OutboxStatus.Pending,
-    };
+        if (string.IsNullOrWhiteSpace(subject))
+            throw new ArgumentException("Subject cannot be null or empty.", nameof(subject));
+        if (string.IsNullOrWhiteSpace(body))
+            throw new ArgumentException("Body cannot be null or empty.", nameof(body));
+
+        return new()
+        {
+            UserId = userId,
+            DomainId = domainId,
+            Type = type,
+            Channel = channel,
+            Severity = severity,
+            DeduplicationKey = deduplicationKey,
+            Subject = subject,
+            Body = body,
+            Status = OutboxStatus.Pending,
+        };
+    }
 
     public void MarkSent()
     {

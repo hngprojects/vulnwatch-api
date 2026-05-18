@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Serilog.Context;
 
 namespace Web.Middleware;
@@ -16,7 +17,7 @@ public class RequestLoggingMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         var request = context.Request;
-        var startTime = DateTime.UtcNow;
+        var stopwatch = Stopwatch.StartNew();;
 
         using (LogContext.PushProperty("RequestId", context.TraceIdentifier))
         {
@@ -26,7 +27,8 @@ public class RequestLoggingMiddleware
             }
             finally
             {
-                var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
+                stopwatch.Stop();
+                var elapsed = stopwatch.Elapsed.TotalMilliseconds;
                 var statusCode = context.Response.StatusCode;
                 var level = statusCode >= 500 ? LogLevel.Error
                            : statusCode >= 400 ? LogLevel.Warning

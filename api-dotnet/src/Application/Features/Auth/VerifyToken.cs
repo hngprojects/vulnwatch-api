@@ -5,6 +5,7 @@ using Domain.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Auth;
 
@@ -31,8 +32,11 @@ public class VerifyTokenHandler : IRequestHandler<VerifyTokenCommand, Result<Mes
             return Result<MessageResponse>.Failure(Error.NotFound("User not found."));
 
         if (user.EmailConfirmed)
+        {
+            await TryCreateDefaultPrefsAsync(user.Id, ct);   
             return Result<MessageResponse>.Success(
                 MessageResponse.Create("Email verified! Proceed to login."));
+        }
 
         var decodedToken = WebUtility.UrlDecode(cmd.Token);
         var identityResult = await _userManager.ConfirmEmailAsync(user, decodedToken);
@@ -57,5 +61,21 @@ public class VerifyTokenHandler : IRequestHandler<VerifyTokenCommand, Result<Mes
 
         return Result<MessageResponse>.Success(
             MessageResponse.Create("Email verified! Proceed to login."));
+    }
+
+    private async Task TryCreateDefaultPrefsAsync(Guid userId, CancellationToken ct)
+    {
+        try
+        {
+            var prefs = NotificationPreferences.Create(userId, emailAlerts: true);
+            await _notifPrefs.AddAsync(prefs, ct);
+            await _notifPrefs.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex)
+            when (ex.InnerException?.GetType().FullName == "Npgsql.PostgresException" &&
+                  ex.InnerException.GetType().GetProperty("SqlState")?.GetValue(ex.InnerException) as string == "23505")
+        {
+            // Prefs already exist — another path seeded them first. No-op.
+        }
     }
 }

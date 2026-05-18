@@ -60,12 +60,11 @@ public class AlertOutboxProcessor : BackgroundService
 
                     case AlertChannel.Slack:
                         // wire up your Slack webhook here
-                        _logger.LogInformation("Slack alert stub for user {UserId}", alert.UserId);
-                        break;
+                        throw new NotSupportedException("Slack delivery is not implemented.");
 
                     case AlertChannel.Push:
-                        _logger.LogInformation("Push alert stub for user {UserId}", alert.UserId);
-                        break;
+                        // wire up your Push webhook here
+                        throw new NotSupportedException("Push delivery is not implemented.");
                 }
 
                 alert.MarkSent();
@@ -73,7 +72,7 @@ public class AlertOutboxProcessor : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send alert {AlertId}", alert.Id);
-                alert.MarkFailed(ex.Message);
+                alert.MarkFailed("Delivery failed. See logs for details.");
             }
         }
 
