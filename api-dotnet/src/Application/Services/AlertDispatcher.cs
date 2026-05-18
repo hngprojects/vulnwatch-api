@@ -2,10 +2,9 @@ using Application.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Domain.Events;
-
+using Microsoft.EntityFrameworkCore;
 namespace Application.Services;
 
-// Application/Services/AlertDispatcher.cs
 public class AlertDispatcher
 {
     private readonly IAlertRepository _alerts;
@@ -29,20 +28,17 @@ public class AlertDispatcher
             case ScanCompletedEvent e:
                 await HandleScanCompleted(e, ct);
                 break;
-            // case DomainStatusChangedEvent e:
-            //     await HandleDomainStatusChanged(e, ct);
-            //     break;
         }
     }
 
     private async Task HandleSslExpiry(SslExpiryEvent e, CancellationToken ct)
     {
-        // Deduplicate — don't spam the same alert within 24h
-        var alreadySent = await _alerts.HasRecentAlert(
-            e.UserId, AlertType.SslExpiry, e.DomainId,
-            TimeSpan.FromHours(24), ct);
-
-        if (alreadySent) return;
+        // REMOVED: HasRecentAlert pre-check — it was a non-atomic TOCTOU guard.
+        // Deduplication is now enforced by the DB-level unique index on
+        // (UserId, AlertType, DomainId, DeduplicationKey).
+        // See migration: AddAlertDeduplicationIndex.
+        // We attempt the insert unconditionally and treat a unique-constraint
+        // violation as "already sent" — a safe no-op.
 
         var prefs = await _prefs.GetByUserId(e.UserId, ct);
         var channels = ResolveChannels(prefs);
@@ -53,7 +49,17 @@ public class AlertDispatcher
             await _alerts.AddAsync(alert, ct);
         }
 
-        await _alerts.SaveChangesAsync(ct);
+        try
+        {
+            await _alerts.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            // A concurrent dispatcher already inserted the same alert window.
+            // Detach tracked-but-unsaved entities so the DbContext stays clean,
+            // then swallow — this outcome is correct, not an error.
+            _alerts.DetachUnsavedAlerts();
+        }
     }
 
     private async Task HandleScanCompleted(ScanCompletedEvent e, CancellationToken ct)
@@ -70,19 +76,21 @@ public class AlertDispatcher
         await _alerts.SaveChangesAsync(ct);
     }
 
-    // private async Task HandleDomainStatusChanged(DomainStatusChangedEvent e, CancellationToken ct)
-    // {
-    //     var prefs = await _prefs.GetByUserId(e.UserId, ct);
-    //     var channels = ResolveChannels(prefs);
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        var inner = ex.InnerException;
 
-    //     foreach (var channel in channels)
-    //     {
-    //         var alert = AlertFactory.DomainStatusChanged(e, channel);
-    //         await _alerts.AddAsync(alert, ct);
-    //     }
+        if (inner?.GetType().FullName == "Npgsql.PostgresException")
+        {
+            const string uniqueViolationSqlState = "23505";
+            var sqlState = inner.GetType()
+                .GetProperty("SqlState")?
+                .GetValue(inner) as string;
+            return sqlState == uniqueViolationSqlState;
+        }
 
-    //     await _alerts.SaveChangesAsync(ct);
-    // }
+        return false;
+    }
 
     private static List<AlertChannel> ResolveChannels(NotificationPreferences? prefs)
     {

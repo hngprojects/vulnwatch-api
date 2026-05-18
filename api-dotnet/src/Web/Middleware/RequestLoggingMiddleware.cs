@@ -38,7 +38,7 @@ public class RequestLoggingMiddleware
                     request.Path,
                     statusCode,
                     Math.Round(elapsed, 1),
-                    context.Connection.RemoteIpAddress,
+                    context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                     context.TraceIdentifier);
             }
         }

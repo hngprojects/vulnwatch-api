@@ -213,7 +213,7 @@ builder.Services.AddSingleton<LookupClient>(_ =>
             );
 builder.Services.AddScoped<IDnsResolver, DnsResolver>();
 builder.Services.AddSignalR();
-// builder.Services.AddHostedService<ScanResultConsumer>();
+builder.Services.AddHostedService<ScanResultConsumer>();
 builder.Services.AddScoped<IAlertRepository, AlertRepository>();
 builder.Services.AddHostedService<AlertOutboxProcessor>();
 builder.Services.AddScoped<AlertDispatcher>();

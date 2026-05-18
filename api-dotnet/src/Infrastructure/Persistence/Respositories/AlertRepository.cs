@@ -27,4 +27,10 @@ public sealed class AlertRepository(VulnWatchDbContext db)
             a.DomainId == domainId &&
             a.CreatedAt >= cutoff, ct);
     }
+
+    public void DetachUnsavedAlerts() {
+        foreach (var entry in Db.ChangeTracker.Entries<Alert>()
+                    .Where(e => e.State == EntityState.Added).ToList())
+            entry.State = EntityState.Detached;
+    }
 }

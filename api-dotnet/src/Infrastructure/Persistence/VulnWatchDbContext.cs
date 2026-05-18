@@ -149,5 +149,12 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
         {
             e.Property(w => w.Status).HasConversion<string>();
         });
+
+        builder.Entity<Alert>(e =>
+        {
+            e.HasIndex(a => new { a.UserId, a.Type, a.DomainId, a.DeduplicationKey })
+            .IsUnique()
+            .HasDatabaseName("IX_Alerts_Deduplication");
+        });
     }
 }

@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Http;
 
 
 namespace Application.Features.Scans;
+
 public record GetScanReportQuery(Guid ScanId) : IRequest<Result<ScanReportDto>>;
 
 public class GetScanReportHandler(
@@ -86,8 +87,12 @@ public class GetScanReportHandler(
 
     private static string BuildGoodNews(List<Finding> findings)
     {
-        var configOnly = findings.All(f =>
-            f.Surface == FindingSurface.HttpHeaders || f.Surface == FindingSurface.Dns);
+        var openFindings = findings.Where(f => f.Status == FindingStatus.Open).ToList();
+        if (!openFindings.Any())
+            return "No open findings detected.";
+
+        var configOnly = openFindings.All(f =>
+                f.Surface == FindingSurface.HttpHeaders || f.Surface == FindingSurface.Dns);
 
         return configOnly
             ? "These are configuration fixes that don't require code changes."
@@ -116,8 +121,8 @@ public class GetScanReportHandler(
         var hasHigh = findings.Any(f => f.Severity == FindingSeverity.High);
 
         var score = hasCritical ? Random.Shared.Next(30, 50)
-                  : hasHigh    ? Random.Shared.Next(55, 70)
-                  :              Random.Shared.Next(75, 85);
+                  : hasHigh ? Random.Shared.Next(55, 70)
+                  : Random.Shared.Next(75, 85);
 
         var status = hasCritical ? "Critical" : hasHigh ? "Warning" : "Pass";
         var detail = findings.First().Title;

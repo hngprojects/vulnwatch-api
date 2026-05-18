@@ -8,6 +8,7 @@ public class Alert : EntityBase
     public AlertType Type { get; private set; }
     public AlertChannel Channel { get; private set; }
     public AlertSeverity Severity { get; private set; }
+    public string DeduplicationKey { get; init; } = string.Empty;
     public string Subject { get; private set; } = default!;
     public string Body { get; private set; } = default!;
     public OutboxStatus Status { get; private set; }
@@ -22,6 +23,7 @@ public class Alert : EntityBase
         AlertType type,
         AlertChannel channel,
         AlertSeverity severity,
+        string deduplicationKey,
         string subject,
         string body,
         Guid? domainId = null) => new()
@@ -31,6 +33,7 @@ public class Alert : EntityBase
         Type = type,
         Channel = channel,
         Severity = severity,
+        DeduplicationKey = deduplicationKey,
         Subject = subject,
         Body = body,
         Status = OutboxStatus.Pending,

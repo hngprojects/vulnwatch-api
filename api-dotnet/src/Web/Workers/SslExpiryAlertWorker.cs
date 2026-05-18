@@ -24,8 +24,15 @@ public class SslExpiryChecker : BackgroundService
     {
         while (!ct.IsCancellationRequested)
         {
-            await CheckExpiringCertificates(ct);
-            // Run once per day
+            try
+            {
+                await CheckExpiringCertificates(ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogError(ex, "SSL expiry checker cycle failed");
+            }
+
             await Task.Delay(TimeSpan.FromHours(24), ct);
         }
     }

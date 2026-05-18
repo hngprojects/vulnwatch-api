@@ -18,6 +18,7 @@ public static class AlertFactory
             type: AlertType.SslExpiry,
             channel: channel,
             severity: severity,
+            deduplicationKey: DateTime.UtcNow.ToString("yyyy-MM-dd"),
             subject: $"SSL certificate for {e.DomainName} expires in {e.DaysRemaining} days",
             body: BuildSslExpiryBody(e),
             domainId: e.DomainId);
@@ -33,6 +34,7 @@ public static class AlertFactory
             type: AlertType.ScanCompleted,
             channel: channel,
             severity: severity,
+            deduplicationKey: e.ScanId.ToString(),
             subject: $"Scan complete for {e.DomainName} — Score: {e.SecurityScore}/100",
             body: BuildScanCompletedBody(e),
             domainId: e.DomainId);

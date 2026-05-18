@@ -18,6 +18,7 @@ public interface IAlertRepository : IRepository<Alert>
     Task<List<Alert>> GetPendingAsync(int batchSize, CancellationToken ct);
     Task<bool> HasRecentAlert(Guid userId, AlertType type, Guid? domainId,
         TimeSpan window, CancellationToken ct);
+    void DetachUnsavedAlerts();
 }
 
 public interface IRefreshTokenRepository : IRepository<RefreshToken>
