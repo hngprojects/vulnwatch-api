@@ -37,16 +37,25 @@ public interface FindingRepository extends JpaRepository<Finding, UUID> {
   /** Counts total findings for a specific scan. */
   long countByScanId(UUID scanId);
 
+  /**
+   * Deletes all findings for a specific scan and surface.
+   * Used when replaying a failed job from DLQ to remove old scanner-error findings
+   * before saving new AI findings.
+   */
+  @Modifying
+  @Transactional
+  @Query("DELETE FROM Finding f WHERE f.scanId = :scanId AND f.surface = :surface")
+  void deleteByScanIdAndSurface(@Param("scanId") UUID scanId, @Param("surface") SurfaceType surface);
+
   /** Updates the status of a finding (OPEN → REMEDIATED/IGNORED). */
   @Modifying
   @Transactional
   @Query("UPDATE Finding f SET f.status = :status WHERE f.id = :id")
-  public void updateStatus(@Param("id") UUID id, @Param("status") FindingStatus status);
+  void updateStatus(@Param("id") UUID id, @Param("status") FindingStatus status);
 
   /** Bulk updates status for all findings of a scan. */
   @Modifying
   @Transactional
   @Query("UPDATE Finding f SET f.status = :status WHERE f.scanId = :scanId")
-  public void updateStatusByScanId(
-      @Param("scanId") UUID scanId, @Param("status") FindingStatus status);
+  void updateStatusByScanId(@Param("scanId") UUID scanId, @Param("status") FindingStatus status);
 }
