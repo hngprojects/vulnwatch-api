@@ -34,6 +34,9 @@ public interface FindingRepository extends JpaRepository<Finding, UUID> {
   /** Finds all findings for a scan with a specific status. */
   List<Finding> findByScanIdAndStatus(UUID scanId, FindingStatus status);
 
+  /** Counts total findings for a specific scan. */
+  long countByScanId(UUID scanId);
+
   /** Updates the status of a finding (OPEN → REMEDIATED/IGNORED). */
   @Modifying
   @Transactional
