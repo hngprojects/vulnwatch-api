@@ -158,10 +158,11 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
 
         builder.Entity<WebHookOutBox>(e =>
         {
-            e.Property(w => w.Status).HasConversion<string>();
+            e.Property(w => w.Status)
+            .HasConversion<string>();
             e.HasIndex(w => new { w.Status, w.CreatedAt })
-             .HasFilter("\"Status\" = 'Pending'")
-             .HasDatabaseName("IX_WebHookOutBox_Pending_CreatedAt");
+            .HasFilter("\"Status\" = 'Pending'")
+            .HasDatabaseName("IX_WebHookOutBox_Pending_CreatedAt");
         });
 
         builder.Entity<Alert>(e =>
@@ -169,11 +170,20 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
             e.HasIndex(a => new { a.UserId, a.Type, a.DomainId, a.DeduplicationKey })
             .IsUnique()
             .HasDatabaseName("IX_Alerts_Deduplication");
+
+            e.Property(a => a.Status)
+            .HasConversion<string>();
+        
+            e.HasIndex(a => new { a.UserId, a.Type, a.DomainId, a.DeduplicationKey })
+            .IsUnique()
+            .HasDatabaseName("IX_Alerts_Deduplication");
+        
             e.HasIndex(a => new { a.UserId, a.CreatedAt })
-             .HasDatabaseName("IX_Alerts_UserId_CreatedAt");
+            .HasDatabaseName("IX_Alerts_UserId_CreatedAt");
+        
             e.HasIndex(a => new { a.Channel, a.CreatedAt })
-             .HasFilter("\"Status\" = 'Pending'")
-             .HasDatabaseName("IX_Alerts_Pending_Channel_CreatedAt");
+            .HasFilter("\"Status\" = 'Pending'")
+            .HasDatabaseName("IX_Alerts_Pending_Channel_CreatedAt");
         });
     }
 }

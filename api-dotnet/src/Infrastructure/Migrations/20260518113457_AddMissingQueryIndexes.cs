@@ -26,6 +26,14 @@ namespace Infrastructure.Migrations
                 name: "IX_Findings_ScanId",
                 table: "Findings");
 
+            migrationBuilder.AlterColumn<string>(
+                name: "Status",
+                table: "Alerts",
+                type: "text",
+                nullable: false,
+                oldClrType: typeof(int),
+                oldType: "integer");
+
             migrationBuilder.CreateIndex(
                 name: "IX_WebHookOutBox_Pending_CreatedAt",
                 table: "WebHookOutBox",
@@ -95,6 +103,14 @@ namespace Infrastructure.Migrations
             migrationBuilder.DropIndex(
                 name: "IX_Alerts_UserId_CreatedAt",
                 table: "Alerts");
+
+            migrationBuilder.AlterColumn<int>(
+                name: "Status",
+                table: "Alerts",
+                type: "integer",
+                nullable: false,
+                oldClrType: typeof(string),
+                oldType: "text");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Remediations_FindingId",

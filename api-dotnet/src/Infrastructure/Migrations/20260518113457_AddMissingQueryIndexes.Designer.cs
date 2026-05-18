@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(VulnWatchDbContext))]
-    [Migration("20260518105331_AddMissingQueryIndexes")]
+    [Migration("20260518113457_AddMissingQueryIndexes")]
     partial class AddMissingQueryIndexes
     {
         /// <inheritdoc />
@@ -60,8 +60,9 @@ namespace Infrastructure.Migrations
                     b.Property<int>("Severity")
                         .HasColumnType("integer");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("Subject")
                         .IsRequired()
