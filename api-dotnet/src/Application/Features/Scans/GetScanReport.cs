@@ -27,7 +27,13 @@ public class GetScanReportHandler(
             return Result<ScanReportDto>.Failure(
                 Error.Validation($"Scan is not complete. Current status: {scan.Status}"));
 
-        var domain = await domainRepo.GetById(scan.DomainId!.Value, ct);
+        // var domain = await domainRepo.GetById(scan.DomainId!.Value, ct);
+        if (scan.DomainId is null)
+            return Result<ScanReportDto>.Failure(Error.Validation("Scan is not associated with a domain."));
+
+        var domain = await domainRepo.GetById(scan.DomainId.Value, ct);
+        if (domain is null)
+            return Result<ScanReportDto>.Failure(Error.NotFound("Domain not found."));
 
         var findings = scan.Findings.ToList();
 
