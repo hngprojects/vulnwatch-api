@@ -1,4 +1,4 @@
-package com.vulnwatch.worker;
+package com.vulnwatch.worker.event;
 
 import com.vulnwatch.worker.enums.SurfaceType;
 import lombok.AllArgsConstructor;
