@@ -1,4 +1,4 @@
-package com.vulnwatch.worker.ai;
+package com.vulnwatch.worker.converter;
 
 import com.vulnwatch.worker.entity.Finding;
 import com.vulnwatch.worker.enums.FindingSeverity;
