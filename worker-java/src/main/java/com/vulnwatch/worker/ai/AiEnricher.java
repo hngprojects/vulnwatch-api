@@ -1,10 +1,12 @@
 package com.vulnwatch.worker.ai;
 
 import com.vulnwatch.worker.entity.Finding;
+import com.vulnwatch.worker.enums.SurfaceType;
 import com.vulnwatch.worker.models.AggregatedScanData;
 import com.vulnwatch.worker.models.ai.EnrichedScanResult;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -80,5 +82,8 @@ public class AiEnricher {
       log.error("AI enrichment failed for scan: {}", scanId, e);
       return fallbackCreator.create(scanId, e.getMessage());
     }
+  }
+
+  public void enrichForSurface(UUID scanId, SurfaceType surface, Map<String, Object> stringObjectMap) {
   }
 }
