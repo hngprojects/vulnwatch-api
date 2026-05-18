@@ -34,9 +34,8 @@ public class Scan {
   @Schema(description = "Idempotency key to prevent duplicate processing")
   private UUID idempotencyKey;
 
-  @Enumerated(EnumType.STRING)
   @Column(nullable = false)
-  @Schema(description = "Type of target scanned", example = "DOMAIN")
+  @Schema(description = "Type of target scanned", example = "Domain")
   private TargetType targetType;
 
   @Schema(description = "Domain ID (if targetType=DOMAIN)")
@@ -45,9 +44,8 @@ public class Scan {
   @Schema(description = "Repository ID (if targetType=REPOSITORY)")
   private Long repoId;
 
-  @Enumerated(EnumType.STRING)
   @Column(nullable = false)
-  @Schema(description = "Scan status", example = "QUEUED")
+  @Schema(description = "Scan status", example = "Queued")
   private ScanStatus status;
 
   @Schema(description = "Security score 0-100", minimum = "0", maximum = "100")
