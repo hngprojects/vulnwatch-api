@@ -16,6 +16,7 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -55,10 +56,10 @@ public class RedisConfig {
   }
 
   @Bean
-  public DefaultRedisScript<Long> popAndRetryScript() {
-    DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+  public DefaultRedisScript<List> popAndRetryScript() {
+    DefaultRedisScript<List> script = new DefaultRedisScript<>();
     script.setLocation(new ClassPathResource("lua/pop_and_retry.lua"));
-    script.setResultType(Long.class);
+    script.setResultType(List.class);
     return script;
   }
 
