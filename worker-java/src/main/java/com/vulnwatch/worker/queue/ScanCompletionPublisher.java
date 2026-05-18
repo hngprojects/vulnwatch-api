@@ -13,6 +13,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -33,10 +34,6 @@ import java.util.UUID;
  *   "processedAt": "2026-05-17T10:00:35Z"
  * }
  * </pre>
- *
- * <p><b>Error handling:</b> serialization failures are rethrown as
- * {@link ScanPublishException} so callers can decide whether to retry
- * or mark the scan failed — silent swallowing would leave C# waiting forever.
  */
 @Slf4j
 @Component
@@ -46,27 +43,36 @@ public class ScanCompletionPublisher {
   private final RedisTemplate<String, Object> redisTemplate;
   private final ObjectMapper objectMapper;
 
-
   /**
    * Publishes a successful (or partially successful) scan completion.
+   * If publishing fails due to an underlying exception, it catches it and handles
+   * a fallback message to alert the consumer that the scan failed.
    *
    * @param scanId the scan identifier
    * @param status expected to be COMPLETED or PARTIAL_FAILURE
    * @param securityScore aggregated score across all surfaces
    * @param findingCount total findings stored
    */
-  public void publishCompletion(UUID scanId, ScanStatus status, int securityScore, int findingCount) {
+  public void publishCompletion(UUID scanId, ScanStatus status, int securityScore,
+                                int findingCount, List<String> fallbackSurfaces) {
     CompletionMessage message = CompletionMessage.builder()
             .scanId(scanId)
             .status(status.name().toLowerCase())
             .securityScore(securityScore)
             .findingCount(findingCount)
+            .hasFallback(!fallbackSurfaces.isEmpty())
+            .fallbackSurfaces(fallbackSurfaces)
             .processedAt(Instant.now())
             .build();
 
     pushToList(message);
-    log.info("Published completion: scanId={}, status={}, score={}, findings={}",
-            scanId, status, securityScore, findingCount);
+
+    if (!fallbackSurfaces.isEmpty()) {
+      log.info("Scan {} completed with fallback on surfaces: {}", scanId, fallbackSurfaces);
+    } else {
+      log.info("Published completion: scanId={}, status={}, score={}, findings={}",
+              scanId, status, securityScore, findingCount);
+    }
   }
 
   /**
@@ -79,7 +85,7 @@ public class ScanCompletionPublisher {
   public void publishScanFailed(UUID scanId, String errorMessage) {
     CompletionMessage message = CompletionMessage.builder()
             .scanId(scanId)
-            .status("failed")
+            .status(ScanStatus.FAILED.getDisplayName())
             .securityScore(null)
             .findingCount(0)
             .processedAt(Instant.now())
@@ -89,28 +95,31 @@ public class ScanCompletionPublisher {
     log.warn("Published failure: scanId={}, reason={}", scanId, errorMessage);
   }
 
-
+  /**
+   * Pushes message to Redis List. Wraps serialization and transport failures.
+   */
   private void pushToList(CompletionMessage message) {
     try {
       String json = objectMapper.writeValueAsString(message);
       redisTemplate.opsForList().leftPush(RedisConfig.Keys.SCAN_RESULTS_LIST, json);
     } catch (JsonProcessingException e) {
-
       throw new ScanPublishException(
               "Failed to serialise completion message for scan " + message.getScanId(), e);
+    } catch (Exception e) {
+      throw new ScanPublishException(
+              "Redis transport failure while pushing message for scan " + message.getScanId(), e);
     }
   }
-
 
   @Data
   @Builder
   private static class CompletionMessage {
     private UUID scanId;
     private String status;
-    private Integer securityScore;   // nullable , absent on failure
+    private Integer securityScore;
     private int findingCount;
+    private boolean hasFallback;
+    private List<String> fallbackSurfaces;
     private Instant processedAt;
   }
-
-
 }
