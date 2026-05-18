@@ -2,27 +2,36 @@ package com.vulnwatch.worker.enums;
 
 import com.vulnwatch.worker.exception.InvalidSurfaceTypeException;
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Getter;
 
 /** Surface types that can be scanned by different scanners. */
+@Getter
 @Schema(description = "Type of security surface being scanned")
 public enum SurfaceType {
+
   @Schema(description = "DNS records and configurations")
-  DNS,
+  DNS("Dns"),
 
   @Schema(description = "SSL/TLS certificates and protocols")
-  SSL,
+  SSL("Ssl"),
 
   @Schema(description = "HTTP security headers")
-  HTTP_HEADERS,
+  HTTP_HEADERS("HttpHeaders"),
 
   @Schema(description = "Dependency vulnerabilities")
-  DEPENDENCY,
+  DEPENDENCY("Dependency"),
 
   @Schema(description = "Hardcoded secrets and credentials")
-  SECRETS,
+  SECRETS("Secrets"),
 
   @Schema(description = "Fallback for AI failure")
-  INFO;
+  INFO("Info");
+
+  private final String name;
+
+  SurfaceType(String name) {
+    this.name = name;
+  }
 
   /**
    * Converts a string to SurfaceType regardless of case.
