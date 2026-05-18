@@ -2,7 +2,7 @@ package com.vulnwatch.worker.queue;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.vulnwatch.worker.SurfaceResultEvent;
+import com.vulnwatch.worker.event.SurfaceResultEvent;
 import com.vulnwatch.worker.config.RedisConfig;
 import com.vulnwatch.worker.exception.SurfacePublishException;
 import lombok.RequiredArgsConstructor;

@@ -1,6 +1,6 @@
 package com.vulnwatch.worker.processors;
 
-import com.vulnwatch.worker.SurfaceResultEvent;
+import com.vulnwatch.worker.event.SurfaceResultEvent;
 import com.vulnwatch.worker.enums.SurfaceType;
 import com.vulnwatch.worker.enums.TargetType;
 import com.vulnwatch.worker.interfaces.Scanner;
