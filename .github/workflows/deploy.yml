@@ -4,10 +4,10 @@ on:
   pull_request:
     branches: [staging, main]
     types: [closed]
-
+    
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
+  
 jobs:
   deploy:
     if: github.event.pull_request.merged == true && github.event.repository.fork == false
@@ -15,35 +15,33 @@ jobs:
     timeout-minutes: 20
     environment:
       name: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up .NET 8
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-
+          
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
-
+          
       - name: Build .NET API
         run: dotnet publish api-dotnet/src/Web/Web.csproj -c Release -o ./dotnet-publish
-
+        
       - name: Build Java worker
         run: |
           cd worker-java
           ./mvnw clean package -DskipTests
-
+          
       - name: Archive .NET build
         run: tar -czf dotnet-build.tar.gz dotnet-publish
-
+        
       - name: Archive Java build
         run: tar -czf java-build.tar.gz worker-java/target
-
+        
       - name: Copy .NET build to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -52,7 +50,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: dotnet-build.tar.gz
           target: ~/backend-build-artifacts/
-
+          
       - name: Copy Java build to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -61,7 +59,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: java-build.tar.gz
           target: ~/backend-build-artifacts/
-
+          
       - name: Deploy on server
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -82,29 +80,31 @@ jobs:
               WORKER_NAME="worker-staging"
               START_SCRIPT="/var/www/backend-staging/start.sh"
             fi
-
+            
             mkdir -p ~/backend-build-artifacts
             mkdir -p $DOTNET_DIR
             mkdir -p $JAVA_DIR
-
-            # Deploy .NET API
+            
+            # Deploy .NET API (clean first to avoid mixed DLLs)
+            rm -rf $DOTNET_DIR/*
             tar -xzf ~/backend-build-artifacts/dotnet-build.tar.gz -C ~/backend-build-artifacts
             cp -r ~/backend-build-artifacts/dotnet-publish/* $DOTNET_DIR/
-
-            # Deploy Java worker
+            
+            # Deploy Java worker (clean first)
+            rm -rf $JAVA_DIR/*
             tar -xzf ~/backend-build-artifacts/java-build.tar.gz -C ~/backend-build-artifacts
             cp -r ~/backend-build-artifacts/worker-java/target/* $JAVA_DIR/
-
+            
             # Restart services
             pm2 restart $API_NAME 2>/dev/null || pm2 start $START_SCRIPT --name "$API_NAME" --cwd $(dirname $START_SCRIPT)
             JAR_FILE=$(ls $JAVA_DIR/*.jar | grep -v sources | head -1)
             pm2 restart $WORKER_NAME 2>/dev/null || pm2 start "java -jar $JAR_FILE" --name "$WORKER_NAME"
             pm2 save
-
+            
             # Cleanup
             rm -rf ~/backend-build-artifacts/dotnet-publish
             rm -rf ~/backend-build-artifacts/worker-java
-
+            
       - name: Clean up local artifacts
         run: |
           rm -f dotnet-build.tar.gz
