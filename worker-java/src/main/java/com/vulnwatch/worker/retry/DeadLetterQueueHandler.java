@@ -1,9 +1,12 @@
 package com.vulnwatch.worker.retry;
 
+import com.vulnwatch.worker.SurfaceResultEvent;
 import com.vulnwatch.worker.state.RedisSurfaceStateManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
+
+import java.util.EventListener;
 
 @Component
 @RequiredArgsConstructor
@@ -14,10 +17,10 @@ public class DeadLetterQueueHandler {
 
     private static final String DLQ_KEY = "retry:scan:queue";
 
-    public void pushToDLQ(ScanTask task){
+    public void pushToDLQ(SurfaceResultEvent event){
         redisTemplate.opsForList()
-                .leftPush(DLQ_KEY, task);
-        stateManager.updatePermanentlyFailed();
+                .leftPush(DLQ_KEY, event);
+        stateManager.updatePermanentlyFailed(event.getScanId(), event.getSurface(), event.getErrorMessage());
 
     }
 

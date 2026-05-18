@@ -2,15 +2,22 @@ package com.vulnwatch.worker.result;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vulnwatch.worker.CompletionEvent;
+import com.vulnwatch.worker.SurfaceResultEvent;
 import com.vulnwatch.worker.ai.AiEnricher;
+import com.vulnwatch.worker.config.RedisConfig;
+import com.vulnwatch.worker.enums.SurfaceType;
 import com.vulnwatch.worker.models.AggregatedScanData;
+import com.vulnwatch.worker.queue.SurfaceEventPublisher;
 import com.vulnwatch.worker.repository.FindingRepository;
+import com.vulnwatch.worker.retry.DeadLetterQueueHandler;
 import com.vulnwatch.worker.retry.RetryHandler;
 import com.vulnwatch.worker.state.RedisSurfaceStateManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.connection.stream.*;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +25,7 @@ import jakarta.annotation.PostConstruct;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -26,21 +34,23 @@ import java.util.concurrent.Executors;
 @Slf4j
 public class ResultConsumer {
 
-    private final StringRedisTemplate redisTemplate;
+    private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
     private final AiEnricher aiEnricher;
     private final FindingRepository findingRepository;
     private final RedisSurfaceStateManager stateManager;
     private final RetryHandler retryHandler;
+    private final DeadLetterQueueHandler deadLetterQueueHandler;
 
-    @Value("${redis.stream.surface-results:surface:result:stream}")
-    private String streamKey;
 
     @Value("${redis.stream.surface-results.group:surface-result-group}")
-    private String groupName;
+    private String GROUP_NAME;
 
     @Value("${redis.stream.surface-results.consumer:result-worker-1}")
-    private String consumerName;
+    private String CONSUMER_NAME;
+
+    private final String streamKey = RedisConfig.Keys.SURFACE_RESULT_STREAM;
+    private final String scanResult = RedisConfig.Keys.SCAN_RESULTS_LIST;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -53,9 +63,9 @@ public class ResultConsumer {
 
         log.info(
                 "ResultConsumer started | stream={} group={} consumer={}",
-                streamKey,
-                groupName,
-                consumerName
+                RedisConfig.Keys.SCAN_RESULTS_LIST,
+                GROUP_NAME,
+                CONSUMER_NAME
         );
     }
 
@@ -64,16 +74,16 @@ public class ResultConsumer {
         try {
 
             redisTemplate.opsForStream().createGroup(
-                    streamKey,
+                    RedisConfig.Keys.SCAN_RESULTS_LIST,
                     ReadOffset.latest(),
-                    groupName
+                    GROUP_NAME
             );
 
-            log.info("Created Redis consumer group {}", groupName);
+            log.info("Created Redis consumer group {}", GROUP_NAME);
 
         } catch (Exception e) {
 
-            log.info("Consumer group already exists: {}", groupName);
+            log.info("Consumer group already exists: {}", GROUP_NAME);
         }
     }
 
@@ -85,7 +95,7 @@ public class ResultConsumer {
                 @SuppressWarnings("unchecked")
                 List<MapRecord<String, Object, Object>> messages =
                         redisTemplate.opsForStream().read(
-                                Consumer.from(groupName, consumerName),
+                                Consumer.from(GROUP_NAME, CONSUMER_NAME),
                                 StreamReadOptions.empty()
                                         .count(10)
                                         .block(Duration.ofSeconds(5)),
@@ -102,6 +112,9 @@ public class ResultConsumer {
                 for (MapRecord<String, Object, Object> message : messages) {
 
                     processMessage(message);
+
+                    endCheck(message);
+
                 }
 
             } catch (Exception e) {
@@ -119,85 +132,99 @@ public class ResultConsumer {
 
         RecordId messageId = message.getId();
 
+        SurfaceResultEvent event = extractEvent(message);
+
         try {
-
-            Map<Object, Object> body = message.getValue();
-
-            String scanId = (String) body.get("scanId");
-            String surface = (String) body.get("surface");
-            String rawDataJson = (String) body.get("rawData");
 
             log.info(
                     "Received result event | scanId={} surface={} messageId={}",
-                    scanId,
-                    surface,
+                    event.getScanId(),
+                    event.getSurface(),
                     messageId
             );
 
-            /*
-             * 1. Update surface state
-             *
-             * scan:{scanId}:surfaces
-             *
-             * DNS -> SUCCESS
-             * SSL -> SUCCESS
-             */
-            redisTemplate.opsForHash().put(
-                    "scan:" + scanId + ":surfaces",
-                    surface,
-                    "SUCCESS"
-            );
+            if (!event.isSuccess()){
+                stateManager.updateFailure(event.getScanId(), event.getSurface(), event.getErrorMessage());
+                retryHandler.handleFailure(event);
+                return;
+            }
 
-            /*
-             * 2. Deserialize raw data
-             */
-            Map<String, Object> rawData =
-                    objectMapper.readValue(
-                            rawDataJson,
-                            new TypeReference<>() {}
-                    );
-
-
-
-            /*
-             * 3. Run AI enrichment
-             */
+            // Insert findings into the AI Enricher here and persist
             var findings = aiEnricher.enrich()
-            /*
-             * 4. Persist findings
-             *
-             * Replace with DB persistence later
-             */
-
             findingRepository.save();
-            stateManager.updateSuccess();
 
 
-            /*
-             * 5. ACK message
-             */
+
             redisTemplate.opsForStream().acknowledge(
                     streamKey,
-                    groupName,
+                    GROUP_NAME,
                     messageId
             );
+            stateManager.updateSuccess(event.getScanId(), event.getSurface());
+
 
             log.info(
                     "Processed and ACKed result event | scanId={} surface={}",
-                    scanId,
-                    surface
+                    event.getScanId(),
+                    event.getSurface()
             );
 
         } catch (Exception e) {
 
+            if (event != null) {
+                stateManager.updateFailure(event.getScanId(), event.getSurface(), e.getMessage());
+                retryHandler.handleFailure(event);
+
+                log.error(
+                        "Failed processing result message {}",
+                        messageId,
+                        e
+                );
+
+            } else {
+                log.error(
+                        "Invalid payload in message {}",
+                        messageId,
+                        e
+                );
+            }
+        }
+    }
+
+    private void endCheck(MapRecord<String, Object, Object> message){
+
+        RecordId messageId = message.getId();
+
+        SurfaceResultEvent event = extractEvent(message);
+
+        boolean isTerminal = stateManager.isAllTerminal(event.getScanId());
+
+        if(isTerminal){
+            CompletionEvent completionEvent = CompletionEvent.completed(event.getScanId(), )
+            redisTemplate.opsForList()
+                    .leftPush(scanResult, );
+
+        }
+
+    }
+
+    private SurfaceResultEvent extractEvent(MapRecord<String, Object, Object> message){
+        RecordId messageId = message.getId();
+
+        SurfaceResultEvent event = null;
+
+        try {
+            Map<Object, Object> body = message.getValue();
+
+            event = objectMapper.convertValue(body, SurfaceResultEvent.class);
+
+            return event;
+        } catch (Exception e) {
             log.error(
-                    "Failed processing result message {}",
+                    "Invalid payload in message {}",
                     messageId,
                     e
             );
-            stateManager.updateFailure();
-            retryHandler.handleFailure();
-
         }
     }
 
@@ -209,4 +236,5 @@ public class ResultConsumer {
             Thread.currentThread().interrupt();
         }
     }
+
 }

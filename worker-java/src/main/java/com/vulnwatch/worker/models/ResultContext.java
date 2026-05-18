@@ -1,4 +1,4 @@
 package com.vulnwatch.worker.models;
 
-public class RetryJob {
+public class ResultContext {
 }
