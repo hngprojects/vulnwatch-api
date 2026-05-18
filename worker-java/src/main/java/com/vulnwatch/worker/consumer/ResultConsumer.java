@@ -2,15 +2,18 @@ package com.vulnwatch.worker.consumer;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vulnwatch.worker.ai.FallbackResultCreator;
+import com.vulnwatch.worker.ai.ScoreCalculator;
 import com.vulnwatch.worker.circuitbreaker.OpenAiCircuitBreaker;
 import com.vulnwatch.worker.config.RedisConfig;
-import com.vulnwatch.worker.entity.Scan;
+import com.vulnwatch.worker.entity.Finding;
 import com.vulnwatch.worker.enums.ScanStatus;
 import com.vulnwatch.worker.enums.SurfaceType;
 import com.vulnwatch.worker.event.SurfaceResultEvent;
 import com.vulnwatch.worker.interfaces.SurfaceStateManager;
 import com.vulnwatch.worker.models.AggregatedScanData;
 import com.vulnwatch.worker.models.ScanResult;
+import com.vulnwatch.worker.models.ai.EnrichedScanResult;
 import com.vulnwatch.worker.queue.DeadLetterQueueHandler;
 import com.vulnwatch.worker.queue.ScanCompletionPublisher;
 import com.vulnwatch.worker.repository.FindingRepository;
@@ -26,10 +29,8 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -47,6 +48,8 @@ public class ResultConsumer {
     private final DeadLetterQueueHandler dlqHandler;
     private final FindingRepository findingRepository;
     private final ScanRepository scanRepository;
+    private final ScoreCalculator scoreCalculator;
+    private final FallbackResultCreator fallbackCreator;
     private final ExecutorService consumerExecutor;
 
     @Value("${scan.max-retries:3}")
@@ -58,6 +61,7 @@ public class ResultConsumer {
     private static final String CONSUMER_NAME = "worker-" + UUID.randomUUID();
     private static final Duration BLOCK_TIMEOUT = Duration.ofSeconds(5);
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final Map<UUID, List<String>> fallbackSurfacesMap = new ConcurrentHashMap<>();
 
     @PostConstruct
     public void start() {
@@ -85,6 +89,7 @@ public class ResultConsumer {
         log.info("ResultConsumer stopped");
     }
 
+    // ==================== CONSUME LOOP ====================
 
     private void consumeLoop() {
         while (running.get()) {
@@ -165,15 +170,32 @@ public class ResultConsumer {
         UUID scanId = event.getScanId();
         SurfaceType surface = event.getSurface();
 
+        // Delete any previous fallback findings
+        findingRepository.deleteByScanIdAndSurface(scanId, surface);
+
         stateManager.updateSuccess(scanId, surface);
 
-        // AI enrichment is wrapped with circuit breaker
-        // If circuit is open, fallback is used automatically
-        circuitBreaker.enrichWithProtection(
-                buildAggregatedData(scanId, surface, resolveRawData(event))
-        );
+        AggregatedScanData aggregatedData = buildAggregatedData(scanId, surface, resolveRawData(event));
 
-        log.info("AI enrichment complete: scanId={}, surface={}", scanId, surface);
+        EnrichedScanResult enriched = circuitBreaker.enrichWithCircuitBreaker(aggregatedData);
+
+        // Save findings to database
+        if (enriched.getFindings() != null && !enriched.getFindings().isEmpty()) {
+            enriched.getFindings().forEach(f -> f.setScanId(scanId));
+            findingRepository.saveAll(enriched.getFindings());
+            log.info("Saved {} findings for scanId={}, surface={}",
+                    enriched.getFindings().size(), scanId, surface);
+        }
+
+        // Calculate and accumulate score
+        int surfaceScore = scoreCalculator.calculateFromDbFindings(enriched.getFindings());
+        accumulateSurfaceScore(scanId, surface, surfaceScore);
+
+        // Track fallback surfaces for final completion
+        if (enriched.isFallback()) {
+            log.warn("FALLBACK used for scan {} surface {}: {}", scanId, surface, enriched.getFallbackReason());
+            fallbackSurfacesMap.computeIfAbsent(scanId, k -> new ArrayList<>()).add(surface.name());
+        }
 
         checkAndPublishCompletion(scanId);
     }
@@ -185,19 +207,30 @@ public class ResultConsumer {
         int nextAttempt = event.getAttempt() + 1;
 
         if (nextAttempt <= maxRetries) {
-            // Still has retries left → schedule to ZSET
             long delaySeconds = calculateBackoffSeconds(nextAttempt);
+
+            // Update state
             stateManager.updateRetrying(scanId, surface, nextAttempt, event.getErrorMessage());
+
+            // Store in retry ZSET (RetryScheduler picks up independently)
             writeToRetryZset(event, nextAttempt, delaySeconds);
 
             log.warn("Surface {} failed for scan {}: attempt {} of {}, retry in {}s",
                     surface, scanId, nextAttempt, maxRetries, delaySeconds);
         } else {
-            // Max retries exhausted → move to Dead Letter Queue
+            // Max retries exhausted
             stateManager.updatePermanentlyFailed(scanId, surface, event.getErrorMessage());
 
-            // Send to DLQ for manual inspection/replay
+            // Save scanner-error finding
+            Finding failureFinding = fallbackCreator.createScannerFailureFinding(scanId, surface, event.getErrorMessage());
+            failureFinding.setScanId(scanId);
+            findingRepository.save(failureFinding);
+
+            // Move to DLQ for manual inspection
             dlqHandler.moveToDeadLetter(event);
+
+            // Neutral score for failed surface
+            accumulateSurfaceScore(scanId, surface, 50);
 
             log.error("Surface {} permanently failed for scan {} after {} attempts — moved to DLQ",
                     surface, scanId, maxRetries);
@@ -206,36 +239,34 @@ public class ResultConsumer {
         }
     }
 
-    private void writeToRetryZset(SurfaceResultEvent originalEvent, int nextAttempt, long delaySeconds) {
-        String retryKey = retryJobKey(originalEvent.getScanId(), originalEvent.getSurface());
-        long nextRetryAt = Instant.now().getEpochSecond() + delaySeconds;
 
-        try {
-            String eventJson = objectMapper.writeValueAsString(
-                    originalEvent.forRetry(nextAttempt));
+    private void accumulateSurfaceScore(UUID scanId, SurfaceType surface, int score) {
+        String key = "scan:" + scanId + ":scores";
+        redisTemplate.opsForHash().put(key, surface.name(), String.valueOf(score));
+        redisTemplate.expire(key, Duration.ofHours(24));
+        log.debug("Accumulated score for scan {} surface {}: {}", scanId, surface, score);
+    }
 
-            Map<String, String> metadata = Map.of(
-                    "scanId", originalEvent.getScanId().toString(),
-                    "surface", originalEvent.getSurface().name(),
-                    "attempt", String.valueOf(nextAttempt),
-                    "lastError", originalEvent.getErrorMessage() != null
-                            ? originalEvent.getErrorMessage() : "",
-                    "rawDataKey", originalEvent.getRawDataKey() != null
-                            ? originalEvent.getRawDataKey() : "",
-                    "eventJson", eventJson
-            );
+    private int calculateOverallScore(UUID scanId) {
+        String key = "scan:" + scanId + ":scores";
+        Map<Object, Object> scores = redisTemplate.opsForHash().entries(key);
 
-            redisTemplate.opsForHash().putAll(retryKey, metadata);
-            redisTemplate.expire(retryKey, Duration.ofHours(24));
-            redisTemplate.opsForZSet().add(RedisConfig.Keys.RETRY_ZSET, retryKey, nextRetryAt);
-
-            log.debug("Retry job written: key={}, nextRetryAt=epoch+{}s", retryKey, delaySeconds);
-
-        } catch (Exception e) {
-            log.error("CRITICAL: failed to write retry job for scanId={}, surface={} — " +
-                            "surface will not be retried: {}",
-                    originalEvent.getScanId(), originalEvent.getSurface(), e.getMessage(), e);
+        if (scores.isEmpty()) {
+            return 0;
         }
+
+        int total = 0;
+        int count = 0;
+        for (Object value : scores.values()) {
+            try {
+                total += Integer.parseInt(value.toString());
+                count++;
+            } catch (NumberFormatException e) {
+                log.warn("Invalid score value for scan {}: {}", scanId, value);
+            }
+        }
+
+        return count > 0 ? total / count : 0;
     }
 
 
@@ -248,27 +279,36 @@ public class ResultConsumer {
         List<String> succeeded = stateManager.getSuccessfulSurfaces(scanId);
 
         ScanStatus overallStatus = determineScanStatus(succeeded, failed);
-        int overallScore = getOverallScoreFromDatabase(scanId);
+        int overallScore = calculateOverallScore(scanId);
         int totalFindings = (int) findingRepository.countByScanId(scanId);
 
-        completionPublisher.publishCompletion(scanId, overallStatus, overallScore, totalFindings);
+        // Get fallback surfaces and remove from map
+        List<String> fallbackSurfaces = fallbackSurfacesMap.remove(scanId);
+        if (fallbackSurfaces == null) {
+            fallbackSurfaces = List.of();
+        }
 
-        log.info("Scan {} completed with status: {} (score={}, findings={}, succeeded={}, failed={})",
-                scanId, overallStatus, overallScore, totalFindings, succeeded.size(), failed.size());
+        // Update scan entity
+        scanRepository.findById(scanId).ifPresent(scan -> {
+            scan.setSecurityScore(overallScore);
+            scanRepository.save(scan);
+        });
+
+        completionPublisher.publishCompletion(scanId, overallStatus, overallScore, totalFindings, fallbackSurfaces);
+
+        log.info("Scan {} completed: status={}, score={}, findings={}, fallback={}, failed={}",
+                scanId, overallStatus, overallScore, totalFindings, fallbackSurfaces, failed);
+
+        // Clean up
+        String scoresKey = "scan:" + scanId + ":scores";
+        redisTemplate.delete(scoresKey);
     }
 
     private ScanStatus determineScanStatus(List<String> succeeded, List<String> failed) {
         if (succeeded.isEmpty()) {
-            return ScanStatus.FAILED; // Everything failed permanently
+            return ScanStatus.FAILED;
         }
-        // Handles both complete success and partial failure states
         return ScanStatus.COMPLETED;
-    }
-
-    private int getOverallScoreFromDatabase(UUID scanId) {
-        return scanRepository.findById(scanId)
-                .map(Scan::getSecurityScore)
-                .orElse(0);
     }
 
 
@@ -281,7 +321,6 @@ public class ResultConsumer {
                 .build();
     }
 
-
     private Map<String, Object> resolveRawData(SurfaceResultEvent event) {
         if (event.hasRawData()) {
             return event.getRawData();
@@ -289,7 +328,6 @@ public class ResultConsumer {
 
         if (event.hasRawDataKey()) {
             Map<Object, Object> stored = redisTemplate.opsForHash().entries(event.getRawDataKey());
-
             if (stored.get("data") instanceof String json) {
                 try {
                     return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
@@ -303,15 +341,42 @@ public class ResultConsumer {
         return Map.of();
     }
 
+    private void writeToRetryZset(SurfaceResultEvent originalEvent, int nextAttempt, long delaySeconds) {
+        String retryKey = "retry:job:" + originalEvent.getScanId() + ":" + originalEvent.getSurface().name();
+        long nextRetryAt = Instant.now().getEpochSecond() + delaySeconds;
+
+        try {
+            SurfaceResultEvent retryEvent = originalEvent.forRetry(nextAttempt);
+            String eventJson = objectMapper.writeValueAsString(retryEvent);
+
+            Map<String, String> metadata = Map.of(
+                    "scanId", originalEvent.getScanId().toString(),
+                    "surface", originalEvent.getSurface().name(),
+                    "attempt", String.valueOf(nextAttempt),
+                    "lastError", originalEvent.getErrorMessage() != null ? originalEvent.getErrorMessage() : "",
+                    "rawDataKey", originalEvent.getRawDataKey() != null ? originalEvent.getRawDataKey() : "",
+                    "eventJson", eventJson
+            );
+
+            redisTemplate.opsForHash().putAll(retryKey, metadata);
+            redisTemplate.expire(retryKey, Duration.ofHours(24));
+            redisTemplate.opsForZSet().add(RedisConfig.Keys.RETRY_ZSET, retryKey, nextRetryAt);
+
+            log.debug("Retry scheduled: scanId={}, surface={}, attempt={}, delay={}s",
+                    originalEvent.getScanId(), originalEvent.getSurface(), nextAttempt, delaySeconds);
+
+        } catch (Exception e) {
+            log.error("Failed to schedule retry for scanId={}, surface={}",
+                    originalEvent.getScanId(), originalEvent.getSurface(), e);
+        }
+    }
+
     private boolean isAlreadyProcessed(SurfaceResultEvent event) {
         String key = "scan:" + event.getScanId() + ":processed";
-
         Long added = redisTemplate.opsForSet().add(key, event.getEventId().toString());
-
         if (added != null && added > 0) {
-            // First time seeing this event ID (1 element added)
             redisTemplate.expire(key, Duration.ofHours(24));
-            return false;  // Not processed → safe to process
+            return false;
         }
         return true;
     }
@@ -320,10 +385,6 @@ public class ResultConsumer {
         long base = 5L * (1L << (attempt - 1));
         double jitter = 0.8 + (Math.random() * 0.4);
         return Math.max(1L, Math.round(base * jitter));
-    }
-
-    private String retryJobKey(UUID scanId, SurfaceType surface) {
-        return "retry:job:" + scanId + ":" + surface.name();
     }
 
     private void ensureConsumerGroup() {
