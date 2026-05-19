@@ -59,7 +59,7 @@ public class RetryScheduler {
     private final ExecutorService executor;
     private final List<Scanner> scanners;
 
-    private static final int BATCH_SIZE = 10;
+    private static final int BATCH_SIZE = 5;
 
     private Map<SurfaceType, Scanner> scannerMap;
 
@@ -198,14 +198,19 @@ public class RetryScheduler {
                 log.error("Retry failed: scanner={} scan={} surface={} attempt={}: {}",
                         scannerName, scanId, surface, attempt, e.getMessage());
 
-                SurfaceResultEvent event = SurfaceResultEvent
-                        .failure(scanId, surface, e.getMessage(), attempt);
+                try {
+                    SurfaceResultEvent event = SurfaceResultEvent
+                            .failure(scanId, surface, e.getMessage(), attempt);
 
-                if (rawDataKey != null) {
-                    event.setRawDataKey(rawDataKey);
+                    if (rawDataKey != null) {
+                        event.setRawDataKey(rawDataKey);
+                    }
+
+                    surfaceEventPublisher.publish(event);
+                } catch (Exception publishEx) {
+                    log.error("Failed to publish failure event: scanner={} scan={} surface={}: {}",
+                            scannerName, scanId, surface, publishEx.getMessage());
                 }
-
-                surfaceEventPublisher.publish(event);
 
             } finally {
                 // ZSET entry already removed by Lua script — only Hash needs cleanup
