@@ -1,5 +1,6 @@
 package com.vulnwatch.worker.event;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.vulnwatch.worker.enums.SurfaceType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -154,6 +155,7 @@ public class SurfaceResultEvent {
     /**
      * Returns true if this event represents a failure.
      */
+    @JsonIgnore
     public boolean isFailure() {
         return !success;
     }
