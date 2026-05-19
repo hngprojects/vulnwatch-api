@@ -13,6 +13,7 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
         : base(options) { }
 
     // Users table is provided by IdentityDbContext
+    public DbSet<Alert> Alerts => Set<Alert>();
     public DbSet<Waitlist> Waitlists => Set<Waitlist>();
     public DbSet<ScannedDomain> Domains => Set<ScannedDomain>();
     public DbSet<Scan> Scans => Set<Scan>();
@@ -107,6 +108,8 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
              .WithMany(s => s.Findings)
              .HasForeignKey(f => f.ScanId)
              .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(f => new { f.ScanId, f.Severity, f.Status })
+             .HasDatabaseName("IX_Findings_ScanId_Severity_Status");
         });
 
         builder.Entity<Remediation>(e =>
@@ -116,6 +119,8 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
              .WithMany()
              .HasForeignKey(r => r.FindingId)
              .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(r => new { r.FindingId, r.Status })
+             .HasDatabaseName("IX_Remediations_FindingId_Status");
         });
 
         builder.Entity<Integration>(e =>
@@ -125,6 +130,8 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
              .WithMany()
              .HasForeignKey(i => i.UserId)
              .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(i => new { i.UserId, i.Status })
+             .HasDatabaseName("IX_Integrations_UserId_Status");
         });
 
         builder.Entity<MonitoredRepository>(e =>
@@ -134,6 +141,8 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
              .WithMany()
              .HasForeignKey(r => r.UserId)
              .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(r => r.UserId)
+             .HasDatabaseName("IX_MonitoredRepositories_UserId");
         });
 
         builder.Entity<NotificationPreferences>(e =>
@@ -142,11 +151,39 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
              .WithMany()
              .HasForeignKey(n => n.UserId)
              .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(n => n.UserId)
+             .IsUnique()
+             .HasDatabaseName("IX_NotificationPreferences_UserId");
         });
 
         builder.Entity<WebHookOutBox>(e =>
         {
-            e.Property(w => w.Status).HasConversion<string>();
+            e.Property(w => w.Status)
+            .HasConversion<string>();
+            e.HasIndex(w => new { w.Status, w.CreatedAt })
+            .HasFilter("\"Status\" = 'Pending'")
+            .HasDatabaseName("IX_WebHookOutBox_Pending_CreatedAt");
+        });
+
+        builder.Entity<Alert>(e =>
+        {
+            e.HasIndex(a => new { a.UserId, a.Type, a.DomainId, a.DeduplicationKey })
+            .IsUnique()
+            .HasDatabaseName("IX_Alerts_Deduplication");
+
+            e.Property(a => a.Status)
+            .HasConversion<string>();
+        
+            e.HasIndex(a => new { a.UserId, a.Type, a.DomainId, a.DeduplicationKey })
+            .IsUnique()
+            .HasDatabaseName("IX_Alerts_Deduplication");
+        
+            e.HasIndex(a => new { a.UserId, a.CreatedAt })
+            .HasDatabaseName("IX_Alerts_UserId_CreatedAt");
+        
+            e.HasIndex(a => new { a.Channel, a.CreatedAt })
+            .HasFilter("\"Status\" = 'Pending'")
+            .HasDatabaseName("IX_Alerts_Pending_Channel_CreatedAt");
         });
     }
 }

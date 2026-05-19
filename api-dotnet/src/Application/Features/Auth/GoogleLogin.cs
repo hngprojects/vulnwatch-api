@@ -4,6 +4,7 @@ using Domain.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -15,6 +16,7 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
 {
     private readonly UserManager<User> _userManager;
     private readonly IRefreshTokenRepository _refreshTokenRepo;
+    private readonly INotificationPreferencesRepository _notifPrefs;
     private readonly IGoogleTokenVerifier _googleTokenVerifier;
     private readonly IJwtService _jwt;
     private readonly IConfiguration _config;
@@ -23,6 +25,7 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
     public GoogleLoginHandler(
         UserManager<User> userManager,
         IRefreshTokenRepository refreshTokenRepo,
+        INotificationPreferencesRepository notifPrefs,
         IGoogleTokenVerifier googleTokenVerifier,
         IJwtService jwt,
         IConfiguration config,
@@ -30,6 +33,7 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
     {
         _userManager = userManager;
         _refreshTokenRepo = refreshTokenRepo;
+        _notifPrefs = notifPrefs;
         _googleTokenVerifier = googleTokenVerifier;
         _jwt = jwt;
         _config = config;
@@ -58,14 +62,13 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
 
             if (user is null)
             {
-                _logger.LogInformation("GOOGLE USER: {link}", googleUser);
-
-                // user = User.CreateFromGoogle(googleUser.Email, googleUser.Subject);
                 user = User.CreateFromGoogle(googleUser.Email, googleUser.Subject, googleUser.Name, googleUser.Picture);
                 var createResult = await _userManager.CreateAsync(user);
 
                 if (!createResult.Succeeded)
                     return Result<AuthResponse>.Failure(Error.Validation(createResult.Errors.First().Description));
+
+                await TryCreateDefaultPrefsAsync(user.Id, ct);
             }
             else
             {
@@ -100,13 +103,32 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
 
         var accessToken = _jwt.GenerateToken(user);
         var refreshToken = _jwt.GenerateRefreshToken();
+        var expireDays = int.Parse(_config["Jwt:RefreshTokenExpiryDays"] ?? "7")!;
 
-        var refreshTokenExpiryInDays = DateTime.UtcNow.AddMinutes(int.Parse(_config["Jwt:RefreshTokenExpiryDays"]!));
+        var refreshTokenExpiryInDays = DateTime.UtcNow.AddDays(expireDays);
 
         await _refreshTokenRepo.AddAsync(
-                RefreshToken.Create(user.Id, refreshToken, refreshTokenExpiryInDays),
-                ct);
+            RefreshToken.Create(user.Id, refreshToken, refreshTokenExpiryInDays),
+            ct);
         await _refreshTokenRepo.SaveChangesAsync(ct);
+
         return Result<AuthResponse>.Success(AuthResponse.Create(accessToken, refreshToken));
+    }
+
+    private async Task TryCreateDefaultPrefsAsync(Guid userId, CancellationToken ct)
+    {
+        try
+        {
+            var prefs = NotificationPreferences.Create(userId, emailAlerts: true);
+            await _notifPrefs.AddAsync(prefs, ct);
+            await _notifPrefs.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex)
+            when (ex.InnerException?.GetType().FullName == "Npgsql.PostgresException" &&
+                  ex.InnerException.GetType().GetProperty("SqlState")?.GetValue(ex.InnerException) as string == "23505")
+        {
+            // Unique constraint on UserId — concurrent insert already seeded prefs.
+            // The user has default preferences either way; swallow and continue.
+        }
     }
 }
