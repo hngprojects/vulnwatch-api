@@ -3,7 +3,6 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/vulnwatch-be.iml" filepath="$PROJECT_DIR$/.idea/vulnwatch-be.iml" />
-      <module fileurl="file://$PROJECT_DIR$/worker-java/worker.iml" filepath="$PROJECT_DIR$/worker-java/worker.iml" />
     </modules>
   </component>
 </project>
