@@ -70,19 +70,19 @@ jobs:
             if [ "${{ github.event.pull_request.base.ref }}" = "main" ]; then
               DOTNET_DIR="/var/www/backend-production/publish"
               JAVA_DIR="/var/www/backend-production/worker-java/target"
+              WORKER_CWD="/var/www/backend-production/worker-java"
               API_NAME="api-production"
               WORKER_NAME="worker-production"
               START_SCRIPT="/var/www/backend-production/start.sh"
-              API_PORT=5000
-              WORKER_PORT=8080
+              API_PORT=5001
             else
               DOTNET_DIR="/var/www/backend-staging/publish"
               JAVA_DIR="/var/www/backend-staging/worker-java/target"
+              WORKER_CWD="/var/www/backend-staging/worker-java"
               API_NAME="api-staging"
               WORKER_NAME="worker-staging"
               START_SCRIPT="/var/www/backend-staging/start.sh"
-              API_PORT=5001
-              WORKER_PORT=8081
+              API_PORT=5000
             fi
 
             DOTNET_BACKUP="${DOTNET_DIR}-backup"
@@ -146,7 +146,7 @@ jobs:
             pm2 save
 
             # Start Java worker with PM2
-            pm2 start "java -jar $JAR_FILE" --name "$WORKER_NAME"
+            pm2 start "java -jar $JAR_FILE" --name "$WORKER_NAME" --interpreter bash --cwd "$WORKER_CWD"
             pm2 save
 
             # Health check for .NET API — retry 5 times, 3 seconds apart
@@ -154,7 +154,7 @@ jobs:
             API_HEALTHY=false
             for i in 1 2 3 4 5; do
               sleep 3
-              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$API_PORT)
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$API_PORT/health)
               if [ "$STATUS" = "200" ]; then
                 API_HEALTHY=true
                 echo ".NET API health check passed on attempt $i (HTTP $STATUS)"
@@ -164,25 +164,30 @@ jobs:
               fi
             done
 
-            # Health check for Java worker — retry 5 times, 3 seconds apart
+            # Health check for Java worker — verify PM2 process is online and stable
             echo "Running health check for Java worker..."
             WORKER_HEALTHY=false
             for i in 1 2 3 4 5; do
               sleep 3
-              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$WORKER_PORT)
-              if [ "$STATUS" = "200" ]; then
+              WORKER_STATUS=$(pm2 jlist | python3 -c "
+            import sys, json
+            procs = json.load(sys.stdin)
+            match = [p for p in procs if p['name'] == '$WORKER_NAME']
+            print(match[0]['pm2_env']['status'] if match else 'not_found')
+            ")
+              if [ "$WORKER_STATUS" = "online" ]; then
                 WORKER_HEALTHY=true
-                echo "Java worker health check passed on attempt $i (HTTP $STATUS)"
+                echo "Java worker health check passed on attempt $i (status: $WORKER_STATUS)"
                 break
               else
-                echo "Attempt $i: HTTP $STATUS, retrying..."
+                echo "Attempt $i: worker status is '$WORKER_STATUS', retrying..."
               fi
             done
 
             if [ "$API_HEALTHY" = "false" ] || [ "$WORKER_HEALTHY" = "false" ]; then
               echo "Health check failed."
               [ "$API_HEALTHY" = "false" ] && echo ".NET API did not respond."
-              [ "$WORKER_HEALTHY" = "false" ] && echo "Java worker did not respond."
+              [ "$WORKER_HEALTHY" = "false" ] && echo "Java worker is not stable."
 
               # Rollback both services
               pm2 delete $API_NAME || true
@@ -204,7 +209,7 @@ jobs:
                 rm -rf "$JAVA_DIR"
                 cp -r "$JAVA_BACKUP" "$JAVA_DIR"
                 JAR_FILE=$(ls $JAVA_DIR/*.jar | grep -v sources | head -1)
-                pm2 start "java -jar $JAR_FILE" --name "$WORKER_NAME"
+                pm2 start "java -jar $JAR_FILE" --name "$WORKER_NAME" --interpreter bash --cwd "$WORKER_CWD"
                 pm2 save
                 echo "Java worker rollback successful."
               else
