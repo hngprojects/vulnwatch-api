@@ -4,13 +4,17 @@ import com.maxmind.db.CHMCache;
 import com.maxmind.geoip2.DatabaseReader;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
+@Slf4j
 @Configuration
 public class GeoIpManager {
 
@@ -29,17 +33,29 @@ public class GeoIpManager {
     reloadCountryDatabase();
   }
 
-  public DatabaseReader asnReader() {
-    return readerRefAsn.get();
+  public Optional<DatabaseReader> asnReader() {
+    DatabaseReader reader = readerRefAsn.get();
+    if (reader==null){
+      return Optional.empty();
+    }
+    return Optional.of(reader);
   }
 
-  public DatabaseReader countryReader() {
-    return readerRefCountry.get();
+  public Optional<DatabaseReader> countryReader() {
+    DatabaseReader reader = readerRefCountry.get();
+    if (reader==null){
+      return Optional.empty();
+    }
+    return Optional.of(reader);
   }
 
   public void reloadAsnDatabase() throws IOException {
 
-    File dbFile = new File("/Users/mitchelntuen/Downloads/GeoLite2-ASN_20260511/GeoLite2-ASN.mmdb");
+    File dbFile = new File(asnDbPath);
+    if (!dbFile.exists() || !dbFile.isFile()) {
+      log.warn("ASN DB not available at {}", countryDbPath);
+      return;
+    }
 
     DatabaseReader newReader = new DatabaseReader.Builder(dbFile).withCache(new CHMCache()).build();
 
@@ -53,7 +69,11 @@ public class GeoIpManager {
   public void reloadCountryDatabase() throws IOException {
 
     File dbFile =
-        new File("/Users/mitchelntuen/Downloads/GeoLite2-Country_20260508/GeoLite2-Country.mmdb");
+        new File(countryDbPath);
+    if (!dbFile.exists() || !dbFile.isFile()) {
+      log.warn("Country DB not available at {}", countryDbPath);
+      return;
+    }
 
     DatabaseReader newReader = new DatabaseReader.Builder(dbFile).withCache(new CHMCache()).build();
 
