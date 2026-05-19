@@ -28,7 +28,7 @@ public class RedisConfig {
     public static final String SURFACE_RESULT_STREAM = "surface:result:stream";
     public static final String RETRY_ZSET = "scan:retry";
     public static final String DEAD_LETTER_LIST = "scan:dead-letter";
-    public static final String SCAN_RESULTS_LIST = "scan:results";
+    public static final String SCAN_RESULTS_LIST = "scan-results";
 
     private Keys() {}
   }
