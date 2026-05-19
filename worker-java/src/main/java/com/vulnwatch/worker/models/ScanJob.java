@@ -27,7 +27,7 @@ import lombok.NoArgsConstructor;
  * </pre>
  */
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 @Schema(description = "Scan job from C# API via Redis channel 'scan-jobs'")
