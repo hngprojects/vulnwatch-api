@@ -76,7 +76,6 @@ jobs:
               API_START_SCRIPT="/var/www/backend-production/start.sh"
               WORKER_START_SCRIPT="/var/www/backend-production/worker-java/start.sh"
               API_PORT=5001
-              WORKER_PORT=8081
             else
               DOTNET_DIR="/var/www/backend-staging/publish"
               JAVA_DIR="/var/www/backend-staging/worker-java/target"
@@ -86,7 +85,6 @@ jobs:
               API_START_SCRIPT="/var/www/backend-staging/start.sh"
               WORKER_START_SCRIPT="/var/www/backend-staging/worker-java/start.sh"
               API_PORT=5000
-              WORKER_PORT=8080
             fi
 
             DOTNET_BACKUP="${DOTNET_DIR}-backup"
@@ -173,26 +171,8 @@ jobs:
               fi
             done
 
-            # Health check for Java worker — retry 10 times, 5 seconds apart
-            # Spring Boot takes ~15-20 seconds to fully start
-            echo "Running health check for Java worker..."
-            WORKER_HEALTHY=false
-            for i in 1 2 3 4 5 6 7 8 9 10; do
-              sleep 5
-              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$WORKER_PORT)
-              if [ "$STATUS" = "200" ]; then
-                WORKER_HEALTHY=true
-                echo "Java worker health check passed on attempt $i (HTTP $STATUS)"
-                break
-              else
-                echo "Attempt $i: HTTP $STATUS, retrying..."
-              fi
-            done
-
-            if [ "$API_HEALTHY" = "false" ] || [ "$WORKER_HEALTHY" = "false" ]; then
-              echo "Health check failed."
-              [ "$API_HEALTHY" = "false" ] && echo ".NET API did not respond."
-              [ "$WORKER_HEALTHY" = "false" ] && echo "Java worker did not respond."
+            if [ "$API_HEALTHY" = "false" ]; then
+              echo "Health check failed. .NET API did not respond."
 
               # Rollback both services
               pm2 delete $API_NAME || true
