@@ -196,6 +196,7 @@ public class ScanProcessor {
             })
             .orElseGet(() -> {
               log.error("Scan {} not found in database — cannot mark as RUNNING", scanId);
+              publishStartupFailure(scanId, "Scan not found");  // ← add this
               return false;
             });
   }
