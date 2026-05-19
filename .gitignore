@@ -1,2 +1,6 @@
 .vscode
 /public
+.idea/
+*.iml
+.DS_Store
+dsa-practice/

@@ -36,4 +36,5 @@ build/
 application*.properties
 !application-example.properties
 
-.env*
+.env*.idea/
+dsa-practice/

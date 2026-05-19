@@ -1,8 +1,10 @@
 package com.vulnwatch.worker.processors;
 
+import com.vulnwatch.worker.enums.SurfaceType;
 import com.vulnwatch.worker.enums.TargetType;
 import com.vulnwatch.worker.interfaces.Scanner;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
@@ -67,6 +69,29 @@ public class ScannerFilter {
    * <p>Use this when you want to run DOMAIN and REPOSITORY scans separately.
    *
    * @param allScanners All available scanners
+   * @param surfaceType The exact target type to filter by
+   * @return List of scanners that support the specified target type
+   */
+  public Optional<Scanner> filterByExactSurfaceType(List<Scanner> allScanners, SurfaceType surfaceType) {
+    if (surfaceType == null) {
+      log.warn("Surface type is null, returning empty scanner list");
+      return Optional.empty();
+    }
+
+
+   Optional<Scanner> matchingScanner = allScanners.stream().filter(scanner -> scanner.getSurfaceType()==surfaceType).findFirst();
+
+    log.debug(
+        "Filtered scanner for exact surface type: {}", surfaceType);
+    return matchingScanner;
+  }
+
+  /**
+   * Filters scanners that support EXACTLY the given target type.
+   *
+   * <p>Use this when you want to run DOMAIN and REPOSITORY scans separately.
+   *
+   * @param allScanners All available scanners
    * @param targetType The exact target type to filter by
    * @return List of scanners that support the specified target type
    */
@@ -77,10 +102,10 @@ public class ScannerFilter {
     }
 
     List<Scanner> matchingScanners =
-        allScanners.stream().filter(scanner -> scanner.getTargetType() == targetType).toList();
+            allScanners.stream().filter(scanner -> scanner.getTargetType() == targetType).toList();
 
     log.debug(
-        "Filtered {} scanners for exact target type: {}", matchingScanners.size(), targetType);
+            "Filtered {} scanners for exact target type: {}", matchingScanners.size(), targetType);
     return matchingScanners;
   }
 
