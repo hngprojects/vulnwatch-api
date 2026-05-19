@@ -10,9 +10,9 @@ using FluentValidation;
 
 namespace Application.Features.Scans;
 
-public record StartScanCommand(string Domain, ScanCoverage Coverage, Guid IdempotencyKey) : IRequest<Result<StartScanResponse>>;
+public record StartScanCommand(string Domain, ScanCoverage Coverage, SurfaceType SurfaceTypes, Guid IdempotencyKey) : IRequest<Result<StartScanResponse>>;
 
-public record StartScanRequest(string Domain, ScanCoverage Coverage);
+public record StartScanRequest(string Domain, SurfaceType SurfaceTypes, ScanCoverage Coverage);
 
 public record StartScanResponse(Guid ScanId, ScanStatus Status, string Message);
 
@@ -89,7 +89,9 @@ public class StartScanHandler : IRequestHandler<StartScanCommand, Result<StartSc
                 idempotencyKey: cmd.IdempotencyKey,
                 ScanTargetType.Domain,
                 cmd.Coverage,
-                domain.Id
+                cmd.SurfaceTypes,
+                domain.Id,
+                null
             );
 
             await _scanRepo.AddAsync(scan, ct);
@@ -100,7 +102,7 @@ public class StartScanHandler : IRequestHandler<StartScanCommand, Result<StartSc
             // Publish after commit — worker only sees jobs backed by a committed row
             await _redis.PublishScanJob("scan-jobs", new ScanJob(
                 domain.Id, domain.DomainName, scan.Id,
-                ScanTargetType.Domain.ToString(), userId, scan.CreatedAt), ct);
+                ScanTargetType.Domain.ToString(), scan.SurfaceTypes.ToString(),  userId, scan.CreatedAt), ct);
 
             _logger.LogInformation("Scan {ScanId} queued for domain {DomainId}", scan.Id, domain.Id);
 

@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(VulnWatchDbContext))]
-    partial class VulnWatchDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260517181007_AddAlertsTable")]
+    partial class AddAlertsTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -38,10 +41,6 @@ namespace Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("DeduplicationKey")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<Guid?>("DomainId")
                         .HasColumnType("uuid");
 
@@ -57,9 +56,8 @@ namespace Infrastructure.Migrations
                     b.Property<int>("Severity")
                         .HasColumnType("integer");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Subject")
                         .IsRequired()
@@ -75,17 +73,6 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Channel", "CreatedAt")
-                        .HasDatabaseName("IX_Alerts_Pending_Channel_CreatedAt")
-                        .HasFilter("\"Status\" = 'Pending'");
-
-                    b.HasIndex("UserId", "CreatedAt")
-                        .HasDatabaseName("IX_Alerts_UserId_CreatedAt");
-
-                    b.HasIndex("UserId", "Type", "DomainId", "DeduplicationKey")
-                        .IsUnique()
-                        .HasDatabaseName("IX_Alerts_Deduplication");
 
                     b.ToTable("Alerts");
                 });
@@ -135,8 +122,7 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ScanId", "Severity", "Status")
-                        .HasDatabaseName("IX_Findings_ScanId_Severity_Status");
+                    b.HasIndex("ScanId");
 
                     b.ToTable("Findings");
                 });
@@ -170,8 +156,7 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId", "Status")
-                        .HasDatabaseName("IX_Integrations_UserId_Status");
+                    b.HasIndex("UserId");
 
                     b.ToTable("Integrations");
                 });
@@ -213,8 +198,7 @@ namespace Infrastructure.Migrations
                     b.HasIndex("RepoId")
                         .IsUnique();
 
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("IX_MonitoredRepositories_UserId");
+                    b.HasIndex("UserId");
 
                     b.ToTable("MonitoredRepositories");
                 });
@@ -245,9 +229,7 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_NotificationPreferences_UserId");
+                    b.HasIndex("UserId");
 
                     b.ToTable("NotificationPreferences");
                 });
@@ -319,8 +301,7 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("FindingId", "Status")
-                        .HasDatabaseName("IX_Remediations_FindingId_Status");
+                    b.HasIndex("FindingId");
 
                     b.ToTable("Remediations");
                 });
@@ -358,9 +339,6 @@ namespace Infrastructure.Migrations
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<int>("SurfaceTypes")
-                        .HasColumnType("integer");
 
                     b.Property<string>("TargetType")
                         .IsRequired()
@@ -565,10 +543,6 @@ namespace Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Status", "CreatedAt")
-                        .HasDatabaseName("IX_WebHookOutBox_Pending_CreatedAt")
-                        .HasFilter("\"Status\" = 'Pending'");
 
                     b.ToTable("WebHookOutBox");
                 });

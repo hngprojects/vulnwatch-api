@@ -1,6 +1,7 @@
 using Application.Features.Domain;
 using Application.Features.Scans;
 using Domain.Entities;
+using Domain.Enums;
 
 namespace Application.Interfaces;
 
@@ -10,6 +11,14 @@ public interface IRepository<T> where T : class
     void Update(T entity);
     void Remove(T entity);
     Task SaveChangesAsync(CancellationToken ct = default);
+}
+
+public interface IAlertRepository : IRepository<Alert>
+{
+    Task<List<Alert>> GetPendingAsync(int batchSize, CancellationToken ct);
+    Task<bool> HasRecentAlert(Guid userId, AlertType type, Guid? domainId,
+        TimeSpan window, CancellationToken ct);
+    void DetachUnsavedAlerts();
 }
 
 public interface IRefreshTokenRepository : IRepository<RefreshToken>
@@ -33,9 +42,17 @@ public interface IDomainRepository : IRepository<ScannedDomain>
     Task<(IReadOnlyList<ScannedDomain>, int)> GetPaged(DomainFilter q, CancellationToken ct = default);
 }
 
+public interface INotificationPreferencesRepository : IRepository<NotificationPreferences>
+{
+    Task<bool> ExistsForUser(Guid userId, CancellationToken ct);
+    Task<NotificationPreferences?> GetByUserId(Guid userId, CancellationToken ct);
+}
+
 public interface IScanRepository : IRepository<Scan>
 {
+    Task<Scan?> FindByIdWithFindings(Guid scanId, CancellationToken ct);
     Task<Scan?> FindRunningByDomain(Guid domainId, CancellationToken ct);
     Task<Scan?> FindByIdempotencyKey(Guid key, CancellationToken ct);
     Task<(List<Scan> Items, int TotalCount)> GetPaged(ScanFilter filter, CancellationToken ct);
 }
+
