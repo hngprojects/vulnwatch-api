@@ -73,16 +73,20 @@ jobs:
               WORKER_CWD="/var/www/backend-production/worker-java"
               API_NAME="api-production"
               WORKER_NAME="worker-production"
-              START_SCRIPT="/var/www/backend-production/start.sh"
+              API_START_SCRIPT="/var/www/backend-production/start.sh"
+              WORKER_START_SCRIPT="/var/www/backend-production/worker-java/start.sh"
               API_PORT=5001
+              WORKER_PORT=8081
             else
               DOTNET_DIR="/var/www/backend-staging/publish"
               JAVA_DIR="/var/www/backend-staging/worker-java/target"
               WORKER_CWD="/var/www/backend-staging/worker-java"
               API_NAME="api-staging"
               WORKER_NAME="worker-staging"
-              START_SCRIPT="/var/www/backend-staging/start.sh"
+              API_START_SCRIPT="/var/www/backend-staging/start.sh"
+              WORKER_START_SCRIPT="/var/www/backend-staging/worker-java/start.sh"
               API_PORT=5000
+              WORKER_PORT=8080
             fi
 
             DOTNET_BACKUP="${DOTNET_DIR}-backup"
@@ -120,8 +124,8 @@ jobs:
             rm -rf /tmp/dotnet-build.tar.gz /tmp/dotnet-publish
 
             # Verify .NET build
-            if [ ! -f "$START_SCRIPT" ]; then
-              echo "ERROR: start.sh not found at $START_SCRIPT"
+            if [ ! -f "$API_START_SCRIPT" ]; then
+              echo "ERROR: start.sh not found at $API_START_SCRIPT"
               exit 1
             fi
 
@@ -135,6 +139,11 @@ jobs:
             rm -rf /tmp/java-build.tar.gz /tmp/worker-java
 
             # Verify Java build
+            if [ ! -f "$WORKER_START_SCRIPT" ]; then
+              echo "ERROR: worker start.sh not found at $WORKER_START_SCRIPT"
+              exit 1
+            fi
+
             JAR_FILE=$(ls $JAVA_DIR/*.jar 2>/dev/null | grep -v sources | head -1)
             if [ -z "$JAR_FILE" ]; then
               echo "ERROR: No JAR file found in $JAVA_DIR"
@@ -142,11 +151,11 @@ jobs:
             fi
 
             # Start .NET API with PM2
-            pm2 start $START_SCRIPT --name "$API_NAME" --cwd $(dirname $START_SCRIPT)
+            pm2 start $API_START_SCRIPT --name "$API_NAME" --cwd $(dirname $API_START_SCRIPT)
             pm2 save
 
             # Start Java worker with PM2
-            pm2 start "java -jar $JAR_FILE" --name "$WORKER_NAME" --interpreter bash --cwd "$WORKER_CWD"
+            pm2 start $WORKER_START_SCRIPT --name "$WORKER_NAME" --cwd "$WORKER_CWD"
             pm2 save
 
             # Health check for .NET API — retry 5 times, 3 seconds apart
@@ -164,30 +173,26 @@ jobs:
               fi
             done
 
-            # Health check for Java worker — verify PM2 process is online and stable
+            # Health check for Java worker — retry 10 times, 5 seconds apart
+            # Spring Boot takes ~15-20 seconds to fully start
             echo "Running health check for Java worker..."
             WORKER_HEALTHY=false
-            for i in 1 2 3 4 5; do
-              sleep 3
-              WORKER_STATUS=$(pm2 jlist | python3 -c "
-            import sys, json
-            procs = json.load(sys.stdin)
-            match = [p for p in procs if p['name'] == '$WORKER_NAME']
-            print(match[0]['pm2_env']['status'] if match else 'not_found')
-            ")
-              if [ "$WORKER_STATUS" = "online" ]; then
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              sleep 5
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$WORKER_PORT)
+              if [ "$STATUS" = "200" ]; then
                 WORKER_HEALTHY=true
-                echo "Java worker health check passed on attempt $i (status: $WORKER_STATUS)"
+                echo "Java worker health check passed on attempt $i (HTTP $STATUS)"
                 break
               else
-                echo "Attempt $i: worker status is '$WORKER_STATUS', retrying..."
+                echo "Attempt $i: HTTP $STATUS, retrying..."
               fi
             done
 
             if [ "$API_HEALTHY" = "false" ] || [ "$WORKER_HEALTHY" = "false" ]; then
               echo "Health check failed."
               [ "$API_HEALTHY" = "false" ] && echo ".NET API did not respond."
-              [ "$WORKER_HEALTHY" = "false" ] && echo "Java worker is not stable."
+              [ "$WORKER_HEALTHY" = "false" ] && echo "Java worker did not respond."
 
               # Rollback both services
               pm2 delete $API_NAME || true
@@ -197,7 +202,7 @@ jobs:
                 echo "Rolling back .NET API..."
                 rm -rf "$DOTNET_DIR"
                 cp -r "$DOTNET_BACKUP" "$DOTNET_DIR"
-                pm2 start $START_SCRIPT --name "$API_NAME" --cwd $(dirname $START_SCRIPT)
+                pm2 start $API_START_SCRIPT --name "$API_NAME" --cwd $(dirname $API_START_SCRIPT)
                 pm2 save
                 echo ".NET API rollback successful."
               else
@@ -208,8 +213,7 @@ jobs:
                 echo "Rolling back Java worker..."
                 rm -rf "$JAVA_DIR"
                 cp -r "$JAVA_BACKUP" "$JAVA_DIR"
-                JAR_FILE=$(ls $JAVA_DIR/*.jar | grep -v sources | head -1)
-                pm2 start "java -jar $JAR_FILE" --name "$WORKER_NAME" --interpreter bash --cwd "$WORKER_CWD"
+                pm2 start $WORKER_START_SCRIPT --name "$WORKER_NAME" --cwd "$WORKER_CWD"
                 pm2 save
                 echo "Java worker rollback successful."
               else
