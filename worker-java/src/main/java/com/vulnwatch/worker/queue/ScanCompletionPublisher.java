@@ -85,7 +85,7 @@ public class ScanCompletionPublisher {
   public void publishScanFailed(UUID scanId, String errorMessage) {
     CompletionMessage message = CompletionMessage.builder()
             .scanId(scanId)
-            .status(ScanStatus.FAILED.getDisplayName())
+            .status(ScanStatus.FAILED.getDisplayName().toLowerCase())
             .securityScore(null)
             .findingCount(0)
             .processedAt(Instant.now())
