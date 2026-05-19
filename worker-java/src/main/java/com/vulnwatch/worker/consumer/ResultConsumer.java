@@ -89,7 +89,6 @@ public class ResultConsumer {
         log.info("ResultConsumer stopped");
     }
 
-    // ==================== CONSUME LOOP ====================
 
     private void consumeLoop() {
         while (running.get()) {
