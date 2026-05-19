@@ -6,9 +6,11 @@ using Domain.Common;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Web.Extensions;
 
 namespace Web.Controllers;
+[EnableRateLimiting(RateLimitExtensions.GeneralPolicy)]
 
 [ApiController]
 [Route("api/[controller]")]
@@ -38,18 +40,23 @@ public class DomainsController : ControllerBase
 
     [HttpGet]
     [Authorize]
-    public async Task<ActionResult<Result<PagedResult<DomainSummary>>>> GetAllProfile([FromQuery] GetDomainsRequest request, CancellationToken ct)
+    public async Task<ActionResult<Result<PagedResult<DomainSummary>>>> GetUserDomains([FromQuery] GetDomainsRequest request, CancellationToken ct)
     {
-        if (!request.IsValid(out var error))
-            return BadRequest(new { status = "error", message = error });
 
         var query = new GetDomainsQuery(request.Search, request.Status,
                                         request.SortBy, request.Order, request.Page, request.PageSize);
 
         var result = await _mediator.Send(query, ct);
-
         return result.ToHttpResponse(this);
 
+    }
+
+    [HttpGet("{domainId:guid}")]
+    [Authorize]
+    public async Task<ActionResult<Result<DomainSummary>>> GetSingleDomain(Guid domainId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetDomainByIdQuery(domainId), ct);
+        return result.ToHttpResponse(this);
     }
 
 }

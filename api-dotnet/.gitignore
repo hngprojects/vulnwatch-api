@@ -390,3 +390,7 @@ appsettings.*.json
 .envrc
 
 /src/Web/appsettings*.json
+/src/Domain/Domain.csproj.lscache
+/src/Application/Application.csproj.lscache
+/src/Infrastructure/Infrastructure.csproj.lscache
+/src/Web/Web.csproj.lscache

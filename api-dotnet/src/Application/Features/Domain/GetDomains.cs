@@ -26,7 +26,7 @@ public record DomainFilter(
 
 public class GetDomainsHandler(
     IHttpContextAccessor _http,
-    IScannedDomainRepository domains,
+    IDomainRepository domains,
     ICurrentUser currentUser)
     : IRequestHandler<GetDomainsQuery, Result<PagedResult<DomainSummary>>>
 {
@@ -48,12 +48,22 @@ public class GetDomainsHandler(
         var basePath = http.Request.Path;
         var queryString = http.Request.QueryString.ToString();
 
-        var summaries = items.Select(d => new DomainSummary(
-                    d.Id,
-                    d.DomainName,
-                    d.VerificationStatus,
-                    d.CreatedAt,
-                    d.UpdatedAt)).ToList();
+        var summaries = items.Select(d =>
+        {
+            var latestScan = d.Scans
+                .Where(s => s.Status == ScanStatus.Completed)
+                .OrderByDescending(s => s.CompletedAt)
+                .FirstOrDefault();
+
+            return new DomainSummary(
+                d.Id,
+                d.DomainName,
+                d.VerificationStatus,
+                d.CreatedAt,
+                d.UpdatedAt,
+                latestScan?.CompletedAt,
+                latestScan?.SecurityScore);
+        }).ToList();
 
 
         return Result<PagedResult<DomainSummary>>.Success(

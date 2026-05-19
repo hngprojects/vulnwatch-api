@@ -5,6 +5,7 @@ using Domain.Entities;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
 
 namespace Application.Features.Auth;
 
@@ -26,11 +27,15 @@ public class LoginCommandValidator : AbstractValidator<LoginCommand>
 public class LoginHandler : IRequestHandler<LoginCommand, Result<AuthResponse>>
 {
     private readonly UserManager<User> _userManager;
+    private readonly IRefreshTokenRepository _refreshTokenRepo;
+    private readonly IConfiguration _config;
     private readonly IJwtService _jwt;
 
-    public LoginHandler(UserManager<User> userManager, IJwtService jwt)
+    public LoginHandler(UserManager<User> userManager, IRefreshTokenRepository refreshTokenRepo, IConfiguration config, IJwtService jwt)
     {
         _userManager = userManager;
+        _refreshTokenRepo = refreshTokenRepo;
+        _config = config;
         _jwt = jwt;
     }
 
@@ -43,7 +48,16 @@ public class LoginHandler : IRequestHandler<LoginCommand, Result<AuthResponse>>
         if (!user.EmailConfirmed)
             return Result<AuthResponse>.Failure(Error.Unauthorized("Invalid email or password."));
 
-        var token = _jwt.GenerateToken(user);
-        return Result<AuthResponse>.Success(AuthResponse.Create(token, user));
+        var accessToken = _jwt.GenerateToken(user);
+        var refreshToken = _jwt.GenerateRefreshToken();
+
+        var refreshTokenExpiryInDays = DateTime.UtcNow.AddMinutes(int.Parse(_config["Jwt:RefreshTokenExpiryDays"]!));
+
+        await _refreshTokenRepo.AddAsync(
+                RefreshToken.Create(user.Id, refreshToken, refreshTokenExpiryInDays),
+                ct);
+        await _refreshTokenRepo.SaveChangesAsync(ct);
+
+        return Result<AuthResponse>.Success(AuthResponse.Create(accessToken, refreshToken));
     }
 }
