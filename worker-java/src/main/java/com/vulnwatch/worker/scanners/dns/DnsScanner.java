@@ -10,11 +10,12 @@ import com.vulnwatch.worker.scanners.dns.utility.DnsResolver;
 import com.vulnwatch.worker.scanners.dns.utility.RuleEngine;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
 
-@Service
+@Component
 @RequiredArgsConstructor
 public class DnsScanner implements Scanner {
 
