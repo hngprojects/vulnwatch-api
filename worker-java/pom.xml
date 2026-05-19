@@ -285,10 +285,13 @@
 			<scope>test</scope>
 		</dependency>
 
-		<!-- Spring Boot Test -->
+
+
+		<!-- Redis Testcontainers Module (official from RedisLabs) -->
 		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-test</artifactId>
+			<groupId>com.redis.testcontainers</groupId>
+			<artifactId>testcontainers-redis</artifactId>
+			<version>1.6.4</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
