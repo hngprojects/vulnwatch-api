@@ -30,14 +30,12 @@ public class Finding {
   @Schema(description = "Foreign key to scans table")
   private UUID scanId;
 
-  @Enumerated(EnumType.STRING)
   @Column(nullable = false)
-  @Schema(description = "Scanner surface that found this issue", example = "DNS")
+  @Schema(description = "Scanner surface that found this issue", example = "Dns")
   private SurfaceType surface;
 
-  @Enumerated(EnumType.STRING)
   @Column(nullable = false)
-  @Schema(description = "Severity level", example = "MEDIUM")
+  @Schema(description = "Severity level", example = "Medium")
   private FindingSeverity severity;
 
   @Column(nullable = false)
@@ -63,75 +61,78 @@ public class Finding {
   @Schema(description = "Step-by-step remediation steps")
   private String remediationSteps;
 
-  @Enumerated(EnumType.STRING)
   @Column(nullable = false)
-  @Schema(description = "Finding status", example = "OPEN")
+  @Schema(description = "Finding status", example = "Open")
   private FindingStatus status;
 
   public static Finding fromAiResponse(
-      UUID scanId,
-      String severityStr,
-      String surfaceStr,
-      String title,
-      String explanation,
-      String remediationSteps) {
+          UUID scanId,
+          String severityStr,
+          String surfaceStr,
+          String title,
+          String explanation,
+          String remediationSteps) {
+
     FindingSeverity severity;
     try {
-      severity = FindingSeverity.valueOf(severityStr.toUpperCase());
-    } catch (IllegalArgumentException | NullPointerException e) {
+      severity = java.util.stream.Stream.of(FindingSeverity.values())
+              .filter(s -> s.name().equalsIgnoreCase(severityStr) || s.getName().equalsIgnoreCase(severityStr))
+              .findFirst()
+              .orElse(FindingSeverity.MEDIUM);
+    } catch (Exception e) {
       severity = FindingSeverity.MEDIUM;
     }
 
-    SurfaceType surface = SurfaceType.valueOf(surfaceStr.toUpperCase());
+    SurfaceType surface = SurfaceType.fromString(surfaceStr);
 
     return Finding.builder()
-        .scanId(scanId)
-        .surface(surface)
-        .severity(severity)
-        .title(title)
-        .aiExplanation(explanation)
-        .remediationSteps(remediationSteps)
-        .status(FindingStatus.OPEN)
-        .build();
+            .scanId(scanId)
+            .surface(surface)
+            .severity(severity)
+            .title(title)
+            .aiExplanation(explanation)
+            .remediationSteps(remediationSteps)
+            .status(FindingStatus.OPEN)
+            .build();
   }
 
   public static Finding createAiFailureFallback(UUID scanId, String errorMessage) {
     return Finding.builder()
-        .scanId(scanId)
-        .surface(SurfaceType.DNS)
-        .severity(FindingSeverity.MEDIUM)
-        .title("AI Analysis Temporarily Unavailable")
-        .aiExplanation("The automated security analysis service encountered an error.")
-        .technicalDetails("OpenAI API error: " + errorMessage)
-        .remediationSteps("1. Wait 5 minutes\n2. Re-run the scan")
-        .status(FindingStatus.OPEN)
-        .build();
+            .scanId(scanId)
+            .surface(SurfaceType.DNS)
+            .severity(FindingSeverity.MEDIUM)
+            .title("AI Analysis Temporarily Unavailable")
+            .aiExplanation("The automated security analysis service encountered an error.")
+            .technicalDetails("OpenAI API error: " + errorMessage)
+            .remediationSteps("1. Wait 5 minutes\n2. Re-run the scan")
+            .status(FindingStatus.OPEN)
+            .build();
   }
 
   public static Finding createTimeoutFinding(UUID scanId, SurfaceType surface) {
     return Finding.builder()
-        .scanId(scanId)
-        .surface(surface)
-        .severity(FindingSeverity.MEDIUM)
-        .title(surface + " Scanner Timeout")
-        .aiExplanation("The " + surface + " scanner timed out.")
-        .technicalDetails("Scanner timeout exceeded 30 seconds.")
-        .remediationSteps("1. Check target accessibility\n2. Re-run scan")
-        .status(FindingStatus.OPEN)
-        .build();
+            .scanId(scanId)
+            .surface(surface)
+            .severity(FindingSeverity.MEDIUM)
+            .title(surface.getName() + " Scanner Timeout")
+            .aiExplanation("The " + surface.getName() + " scanner timed out.")
+            .technicalDetails("Scanner timeout exceeded 30 seconds.")
+            .remediationSteps("1. Check target accessibility\n2. Re-run scan")
+            .status(FindingStatus.OPEN)
+            .build();
   }
 
   public static Finding createFailureFinding(
-      UUID scanId, SurfaceType surface, String errorMessage) {
+          UUID scanId, SurfaceType surface, String errorMessage) {
     return Finding.builder()
-        .scanId(scanId)
-        .surface(surface)
-        .severity(FindingSeverity.LOW)
-        .title(surface + " Scanner Failed")
-        .aiExplanation("The " + surface + " scanner encountered an error.")
-        .technicalDetails("Error: " + errorMessage)
-        .remediationSteps("1. Re-run the scan")
-        .status(FindingStatus.OPEN)
-        .build();
+            .scanId(scanId)
+            .surface(surface)
+            .severity(FindingSeverity.LOW)
+            .title(surface.getName() + " Scanner Failed")
+            .aiExplanation("The " + surface.getName() + " scanner encountered an error.")
+            .technicalDetails("Error: " + errorMessage)
+            .remediationSteps("1. Re-run the scan")
+            .status(FindingStatus.OPEN)
+            .build();
   }
 }

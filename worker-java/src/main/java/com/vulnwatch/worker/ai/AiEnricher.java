@@ -1,11 +1,16 @@
 package com.vulnwatch.worker.ai;
 
+import com.vulnwatch.worker.converter.FindingsConverter;
 import com.vulnwatch.worker.entity.Finding;
+import com.vulnwatch.worker.enums.SurfaceType;
 import com.vulnwatch.worker.models.AggregatedScanData;
+import com.vulnwatch.worker.models.ScanResult;
 import com.vulnwatch.worker.models.ai.EnrichedScanResult;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -40,45 +45,31 @@ public class AiEnricher {
    * @param aggregatedData Raw results from all scanners
    * @return Enriched result with security score and findings
    */
-  public EnrichedScanResult enrich(AggregatedScanData aggregatedData) {
+  public EnrichedScanResult enrichForSurface(AggregatedScanData aggregatedData) {
     UUID scanId = aggregatedData.getScanId();
-    log.info("Starting AI enrichment for scan: {}", scanId);
+    ScanResult scanResult = aggregatedData.getSuccessfulResults().getFirst();
+    SurfaceType surface = scanResult.getSurface();
+    Map<String, Object> rawData = scanResult.getRawData();
 
-    try {
+    log.info("Starting AI enrichment for scan: {}, surface: {}", scanId, surface);
 
-      String prompt = promptBuilder.buildPrompt(aggregatedData);
-      log.debug("Built prompt for scan: {}, length: {}", scanId, prompt.length());
+    String prompt = promptBuilder.buildSingleSurfacePrompt(surface, rawData);
+    var aiResponse = responseParser.callOpenAi(prompt);
 
-      var aiResponse = responseParser.callOpenAi(prompt);
+    List<Finding> findings = findingsConverter.convertToFindings(scanId, aiResponse.getFindings());
 
-      var aiFindings = aiResponse.getFindings();
-      int findingsCount = (aiFindings == null) ? 0 : aiFindings.size();
-      log.debug("Received AI response for scan: {}, findings: {}", scanId, findingsCount);
 
-      List<Finding> findings =
-          findingsConverter.convertToFindings(scanId, aiResponse.getFindings());
-      log.debug("Converted {} findings for scan: {}", findings.size(), scanId);
+    log.info("AI enrichment completed for scan: {}, surface: {}, findings: {}",
+            scanId, surface, findings.size());
 
-      int securityScore =
-          scoreCalculator.calculateFinalScore(
-              aiResponse.getSecurityScore(), aiResponse.getFindings());
-
-      log.info(
-          "AI enrichment completed for scan: {} - score: {}, findings: {}",
-          scanId,
-          securityScore,
-          findings.size());
-
-      return EnrichedScanResult.builder()
-          .scanId(scanId)
-          .securityScore(securityScore)
-          .findings(findings)
-          .processedAt(Instant.now())
-          .build();
-
-    } catch (Exception e) {
-      log.error("AI enrichment failed for scan: {}", scanId, e);
-      return fallbackCreator.create(scanId, e.getMessage());
-    }
+    return EnrichedScanResult.builder()
+            .scanId(scanId)
+            .surface(surface)
+            .securityScore(0)  // Not used – score calculated later
+            .findings(findings)
+            .processedAt(Instant.now())
+            .build();
   }
+
+
 }

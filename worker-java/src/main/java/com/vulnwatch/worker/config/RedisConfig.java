@@ -16,6 +16,7 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -27,7 +28,7 @@ public class RedisConfig {
     public static final String SURFACE_RESULT_STREAM = "surface:result:stream";
     public static final String RETRY_ZSET = "scan:retry";
     public static final String DEAD_LETTER_LIST = "scan:dead-letter";
-    public static final String SCAN_RESULTS_LIST = "scan:results";
+    public static final String SCAN_RESULTS_LIST = "scan-results";
 
     private Keys() {}
   }
@@ -55,10 +56,10 @@ public class RedisConfig {
   }
 
   @Bean
-  public DefaultRedisScript<Long> popAndRetryScript() {
-    DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+  public DefaultRedisScript<List> popAndRetryScript() {
+    DefaultRedisScript<List> script = new DefaultRedisScript<>();
     script.setLocation(new ClassPathResource("lua/pop_and_retry.lua"));
-    script.setResultType(Long.class);
+    script.setResultType(List.class);
     return script;
   }
 
