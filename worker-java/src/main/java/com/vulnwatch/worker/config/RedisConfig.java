@@ -2,26 +2,38 @@ package com.vulnwatch.worker.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.vulnwatch.worker.queue.RedisJobConsumer;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.stream.MapRecord;
+import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.listener.ChannelTopic;
-import org.springframework.data.redis.listener.RedisMessageListenerContainer;
-import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+
+import java.util.Map;
 
 @Slf4j
 @Configuration
-@RequiredArgsConstructor
 public class RedisConfig {
-  public static final String SCAN_JOB_CHANNEL = "scan-jobs";
-  public static final String SCAN_RESULTS_QUEUE = "scan-results";
 
-  private final RedisConnectionFactory connectionFactory;
+  public static final class Keys {
+    public static final String SCAN_QUEUE = "scan-jobs";
+    public static final String SURFACE_RESULT_STREAM = "surface:result:stream";
+    public static final String RETRY_ZSET = "scan:retry";
+    public static final String DEAD_LETTER_LIST = "scan:dead-letter";
+    public static final String SCAN_RESULTS_LIST = "scan:results";
+
+    private Keys() {}
+  }
+
+
+  public static final String CONSUMER_GROUP = "worker-group";
 
   @Bean
   public ObjectMapper objectMapper() {
@@ -31,23 +43,54 @@ public class RedisConfig {
   }
 
   @Bean
-  public RedisTemplate<String, Object> redisTemplate() {
+  public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
     RedisTemplate<String, Object> template = new RedisTemplate<>();
     template.setConnectionFactory(connectionFactory);
     template.setKeySerializer(new StringRedisSerializer());
-    template.setValueSerializer(new Jackson2JsonRedisSerializer<>(Object.class));
+    template.setValueSerializer(new GenericJackson2JsonRedisSerializer(objectMapper()));
     template.setHashKeySerializer(new StringRedisSerializer());
-    template.setHashValueSerializer(new Jackson2JsonRedisSerializer<>(Object.class));
+    template.setHashValueSerializer(new GenericJackson2JsonRedisSerializer(objectMapper()));
     template.afterPropertiesSet();
     return template;
   }
 
   @Bean
-  public RedisMessageListenerContainer redisContainer(RedisJobConsumer consumer) {
-    RedisMessageListenerContainer container = new RedisMessageListenerContainer();
-    container.setConnectionFactory(connectionFactory);
-    container.addMessageListener(consumer, new ChannelTopic(SCAN_JOB_CHANNEL));
-    log.info("Redis listener started on channel: {}", SCAN_JOB_CHANNEL);
-    return container;
+  public DefaultRedisScript<Long> popAndRetryScript() {
+    DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+    script.setLocation(new ClassPathResource("lua/pop_and_retry.lua"));
+    script.setResultType(Long.class);
+    return script;
+  }
+
+  @Bean
+  public ApplicationRunner initConsumerGroup(RedisTemplate<String, Object> redisTemplate) {
+    return args -> {
+      try {
+        redisTemplate.opsForStream().createGroup(
+                Keys.SURFACE_RESULT_STREAM,
+                ReadOffset.latest(),
+                CONSUMER_GROUP
+        );
+        log.info("Created consumer group '{}' on stream '{}'", CONSUMER_GROUP, Keys.SURFACE_RESULT_STREAM);
+      } catch (RedisSystemException e) {
+        if (e.getMessage() != null && e.getMessage()
+                .contains("ERR The OBJECT key name does not exist")) {
+
+          log.info("Stream doesn't exist, creating dummy entry first...");
+          MapRecord<String, Object, Object> dummy = MapRecord.create(Keys.SURFACE_RESULT_STREAM, Map.of("init", "true"));
+          redisTemplate.opsForStream()
+                  .add(dummy);
+          redisTemplate.opsForStream()
+                  .createGroup(
+                  Keys.SURFACE_RESULT_STREAM,
+                  ReadOffset.latest(),
+                  CONSUMER_GROUP
+          );
+          log.info("Stream created and consumer group registered");
+        } else {
+          log.info("Consumer group already exists or stream already initialised: {}", e.getMessage());
+        }
+      }
+    };
   }
 }
