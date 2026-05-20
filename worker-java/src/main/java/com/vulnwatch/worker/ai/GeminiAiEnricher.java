@@ -16,16 +16,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class AiEnricher {
+public class GeminiAiEnricher {
 
-    private static final String API_URL = "https://api.x.ai/v1/chat/completions";
-    private static final String MODEL = "grok-3-mini";
+    private static final String API_URL =
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
     private final OkHttpClient http = new OkHttpClient();
     private final ObjectMapper mapper = JsonMapper.builder()
             .configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true)
             .build();
-    private final String apiKey = System.getenv("GROK_API_KEY");
+    private final String apiKey = System.getenv("GEMINI_API_KEY");
 
     /**
      * Enriches a single engine result with AI severity analysis.
@@ -36,39 +36,42 @@ public class AiEnricher {
             String prompt = buildPrompt(job, engineResult);
 
             Map<String, Object> body = Map.of(
-                    "model", MODEL,
-                    "max_tokens", 800,
-                    "messages", List.of(
-                            Map.of("role", "system", "content", systemPrompt()),
-                            Map.of("role", "user", "content", prompt)));
+                    "system_instruction", Map.of(
+                            "parts", List.of(Map.of("text", systemPrompt()))),
+                    "contents", List.of(
+                            Map.of("parts", List.of(Map.of("text", prompt)))),
+                    "generationConfig", Map.of(
+                            "maxOutputTokens", 800,
+                            "responseMimeType", "application/json"));
+
+            String url = API_URL + "?key=" + apiKey;
 
             Request request = new Request.Builder()
-                    .url(API_URL)
+                    .url(url)
                     .post(RequestBody.create(
                             mapper.writeValueAsString(body),
                             MediaType.parse("application/json")))
-                    .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
                     .build();
 
             try (Response response = http.newCall(request).execute()) {
                 String responseBody = response.body().string();
-                System.out.printf("[Grok] %s/%s → HTTP %d%n",
+                System.out.printf("[Gemini] %s/%s → HTTP %d%n",
                         job.scanId(), engineResult.surface(), response.code());
 
                 if (!response.isSuccessful()) {
-                    System.err.println("[Grok] API error: " + responseBody);
+                    System.err.println("[Gemini] API error: " + responseBody);
                     return null;
                 }
 
                 String content = extractContent(responseBody);
-                System.out.println("[Grok] raw response: " + content);
+                System.out.println("[Gemini] raw response: " + content);
 
                 String json = stripFences(content);
                 return mapper.readValue(json, AiResult.class);
             }
         } catch (Exception e) {
-            System.err.printf("[Grok] Enrichment failed for %s/%s: %s%n",
+            System.err.printf("[Gemini] Enrichment failed for %s/%s: %s%n",
                     job.scanId(), engineResult.surface(), e.getMessage());
             e.printStackTrace();
             return null;
@@ -76,33 +79,32 @@ public class AiEnricher {
     }
 
     /**
-     * Generates a short scan-start description — kept from original, ported to
-     * Grok.
+     * Generates a short scan-start description.
      */
     public String describe(ScanJob job) {
         try {
             Map<String, Object> body = Map.of(
-                    "model", MODEL,
-                    "max_tokens", 200,
-                    "messages", List.of(
-                            Map.of("role", "user", "content", describePrompt(job))));
+                    "contents", List.of(
+                            Map.of("parts", List.of(Map.of("text", describePrompt(job))))),
+                    "generationConfig", Map.of(
+                            "maxOutputTokens", 200));
+
+            String url = API_URL + "?key=" + apiKey;
 
             Request request = new Request.Builder()
-                    .url(API_URL)
+                    .url(url)
                     .post(RequestBody.create(
                             mapper.writeValueAsString(body),
                             MediaType.parse("application/json")))
-                    .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
                     .build();
 
             try (Response response = http.newCall(request).execute()) {
-                if (!response.isSuccessful())
-                    return null;
+                if (!response.isSuccessful()) return null;
                 return extractContent(response.body().string());
             }
         } catch (Exception e) {
-            System.err.println("[Grok] describe failed: " + e.getMessage());
+            System.err.println("[Gemini] describe failed: " + e.getMessage());
             return null;
         }
     }
@@ -195,10 +197,12 @@ public class AiEnricher {
 
     private String extractContent(String responseBody) throws Exception {
         Map<?, ?> parsed = mapper.readValue(responseBody, Map.class);
-        List<?> choices = (List<?>) parsed.get("choices");
-        Map<?, ?> first = (Map<?, ?>) choices.get(0);
-        Map<?, ?> message = (Map<?, ?>) first.get("message");
-        return (String) message.get("content");
+        List<?> candidates = (List<?>) parsed.get("candidates");
+        Map<?, ?> first = (Map<?, ?>) candidates.get(0);
+        Map<?, ?> content = (Map<?, ?>) first.get("content");
+        List<?> parts = (List<?>) content.get("parts");
+        Map<?, ?> part = (Map<?, ?>) parts.get(0);
+        return (String) part.get("text");
     }
 
     private String stripFences(String raw) {

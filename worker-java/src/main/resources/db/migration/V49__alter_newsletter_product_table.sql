@@ -1,3 +1,0 @@
-ALTER TABLE newsletters
-ADD COLUMN title VARCHAR(255),
-ADD COLUMN content TEXT

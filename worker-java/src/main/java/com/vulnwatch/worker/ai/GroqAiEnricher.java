@@ -16,16 +16,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class AiEnricher {
+public class GroqAiEnricher {
 
-    private static final String API_URL = "https://api.x.ai/v1/chat/completions";
-    private static final String MODEL = "grok-3-mini";
+    private static final String API_URL = "https://api.groq.com/openai/v1/chat/completions";
+    private static final String MODEL   = "llama-3.3-70b-versatile";
 
     private final OkHttpClient http = new OkHttpClient();
     private final ObjectMapper mapper = JsonMapper.builder()
             .configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true)
             .build();
-    private final String apiKey = System.getenv("GROK_API_KEY");
+    private final String apiKey = System.getenv("GROQ_API_KEY");
 
     /**
      * Enriches a single engine result with AI severity analysis.
@@ -38,9 +38,10 @@ public class AiEnricher {
             Map<String, Object> body = Map.of(
                     "model", MODEL,
                     "max_tokens", 800,
+                    "response_format", Map.of("type", "json_object"),  // Groq supports this
                     "messages", List.of(
                             Map.of("role", "system", "content", systemPrompt()),
-                            Map.of("role", "user", "content", prompt)));
+                            Map.of("role", "user",   "content", prompt)));
 
             Request request = new Request.Builder()
                     .url(API_URL)
@@ -53,22 +54,22 @@ public class AiEnricher {
 
             try (Response response = http.newCall(request).execute()) {
                 String responseBody = response.body().string();
-                System.out.printf("[Grok] %s/%s → HTTP %d%n",
+                System.out.printf("[Groq] %s/%s → HTTP %d%n",
                         job.scanId(), engineResult.surface(), response.code());
 
                 if (!response.isSuccessful()) {
-                    System.err.println("[Grok] API error: " + responseBody);
+                    System.err.println("[Groq] API error: " + responseBody);
                     return null;
                 }
 
                 String content = extractContent(responseBody);
-                System.out.println("[Grok] raw response: " + content);
+                System.out.println("[Groq] raw response: " + content);
 
                 String json = stripFences(content);
                 return mapper.readValue(json, AiResult.class);
             }
         } catch (Exception e) {
-            System.err.printf("[Grok] Enrichment failed for %s/%s: %s%n",
+            System.err.printf("[Groq] Enrichment failed for %s/%s: %s%n",
                     job.scanId(), engineResult.surface(), e.getMessage());
             e.printStackTrace();
             return null;
@@ -76,8 +77,7 @@ public class AiEnricher {
     }
 
     /**
-     * Generates a short scan-start description — kept from original, ported to
-     * Grok.
+     * Generates a short scan-start description.
      */
     public String describe(ScanJob job) {
         try {
@@ -97,12 +97,11 @@ public class AiEnricher {
                     .build();
 
             try (Response response = http.newCall(request).execute()) {
-                if (!response.isSuccessful())
-                    return null;
+                if (!response.isSuccessful()) return null;
                 return extractContent(response.body().string());
             }
         } catch (Exception e) {
-            System.err.println("[Grok] describe failed: " + e.getMessage());
+            System.err.println("[Groq] describe failed: " + e.getMessage());
             return null;
         }
     }
@@ -194,10 +193,10 @@ public class AiEnricher {
     }
 
     private String extractContent(String responseBody) throws Exception {
-        Map<?, ?> parsed = mapper.readValue(responseBody, Map.class);
-        List<?> choices = (List<?>) parsed.get("choices");
-        Map<?, ?> first = (Map<?, ?>) choices.get(0);
-        Map<?, ?> message = (Map<?, ?>) first.get("message");
+        Map<?, ?> parsed  = mapper.readValue(responseBody, Map.class);
+        List<?>   choices = (List<?>) parsed.get("choices");
+        Map<?, ?>  first  = (Map<?, ?>) choices.get(0);
+        Map<?, ?>  message = (Map<?, ?>) first.get("message");
         return (String) message.get("content");
     }
 
