@@ -26,7 +26,7 @@ public class QueueListener implements Runnable {
 
     @Override
     public void run() {
-        System.out.println("Listening on queue: " + queueName);
+        System.out.println("Listeninng on queue: " + queueName);
         while (running) {
             try {
                 // JedisPooled manages the pool internally — no try-with-resource needed
