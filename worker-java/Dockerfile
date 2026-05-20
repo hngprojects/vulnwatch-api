@@ -1,24 +1,16 @@
-# syntax=docker/dockerfile:1.6
-
 ########################
 # Stage 1 - Build
 ########################
 FROM maven:3.9.6-eclipse-temurin-21 AS build
 
-ENV MAVEN_OPTS="-XX:+TieredCompilation -XX:TieredStopAtLevel=1"
+# ENV MAVEN_OPTS="-XX:+TieredCompilation -XX:TieredStopAtLevel=1"
 
 WORKDIR /app
 
-COPY .mvn/ .mvn
-COPY mvnw pom.xml ./
-
-RUN --mount=type=cache,target=/root/.m2 \
-    mvn -B -q dependency:go-offline
-
+COPY pom.xml .
+RUN mvn dependency:go-offline -q          # cache deps layer
 COPY src ./src
-
-RUN --mount=type=cache,target=/root/.m2 \
-    mvn -B -q package -DskipTests
+RUN mvn package -q -DskipTests
 
 ########################
 # Stage 2 - Runtime
