@@ -1,4 +1,4 @@
-# [App Name] Integration Guide
+# VulnWatch Integration Guide
 
 ## Overview of this project
 
