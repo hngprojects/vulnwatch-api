@@ -38,7 +38,7 @@ jobs:
 
       - name: Build Docker image (validation)
         run: |
-          docker build -t genderize-api:${{ github.sha }} -f Fourteen.API/Dockerfile .
+          docker build -t genderize-api:${{ github.sha }} -f api-dotnet/Dockerfile .
           echo "Docker image built successfully"
 
   deploy-to-ecs:
@@ -68,7 +68,7 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Fourteen.API/Dockerfile .
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f api-dotnet/Dockerfile .
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
@@ -124,6 +124,7 @@ jobs:
     name: Deploy Java Worker to ECS
     needs: build-worker
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     env:
       WORKER_ECR_REPOSITORY: fourteen-worker
