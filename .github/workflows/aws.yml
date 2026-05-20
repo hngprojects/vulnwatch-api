@@ -128,7 +128,7 @@ jobs:
 
     env:
       WORKER_ECR_REPOSITORY: fourteen-worker
-      WORKER_ECS_SERVICE: fourteen-worker-service
+      WORKER_ECS_SERVICE: vulnwatch-worker
       WORKER_CONTAINER_NAME: fourteen-worker-container
       WORKER_TASK_DEFINITION: fourteen-worker-task
 
