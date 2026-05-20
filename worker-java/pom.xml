@@ -73,6 +73,19 @@
 				</configuration>
 			</plugin>
 
+			<!-- Sets Multi-Release: true in MANIFEST.MF cleanly -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<configuration>
+					<archive>
+						<manifestEntries>
+							<Multi-Release>true</Multi-Release>
+						</manifestEntries>
+					</archive>
+				</configuration>
+			</plugin>
+
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-shade-plugin</artifactId>
@@ -87,9 +100,6 @@
 									<mainClass>com.owlite.worker.Application</mainClass>
 								</transformer>
 							</transformers>
-							<manifestEntries>
-								<Multi-Release>true</Multi-Release>
-							</manifestEntries>
 						</configuration>
 					</execution>
 				</executions>
