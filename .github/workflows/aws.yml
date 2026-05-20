@@ -45,7 +45,7 @@ jobs:
     name: Deploy C# API to ECS
     needs: build-and-test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
       - name: Checkout code
@@ -124,7 +124,7 @@ jobs:
     name: Deploy Java Worker to ECS
     needs: build-worker
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     env:
       WORKER_ECR_REPOSITORY: fourteen-worker
