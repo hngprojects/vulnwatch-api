@@ -57,4 +57,4 @@ jobs:
       - name: Build Java worker
         run: |
           cd worker-java
-          ./mvnw clean package -DskipTests
+          mvn package -q -DskipTests
