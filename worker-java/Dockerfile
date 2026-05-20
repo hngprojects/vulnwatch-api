@@ -9,18 +9,14 @@ ENV MAVEN_OPTS="-XX:+TieredCompilation -XX:TieredStopAtLevel=1"
 
 WORKDIR /app
 
-# Copy only what is needed for dependency resolution
 COPY .mvn/ .mvn
 COPY mvnw pom.xml ./
 
-# Cache Maven dependencies (THIS is the big win)
 RUN --mount=type=cache,target=/root/.m2 \
     mvn -B -q dependency:go-offline
 
-# Now copy source
 COPY src ./src
 
-# Build with cache again
 RUN --mount=type=cache,target=/root/.m2 \
     mvn -B -q package -DskipTests
 
@@ -31,7 +27,7 @@ FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
-COPY --from=build /app/target/*.jar app.jar
+COPY --from=build /app/target/worker-0.0.1-SNAPSHOT.jar app.jar
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 RUN chown -R appuser:appgroup /app
@@ -40,4 +36,4 @@ USER appuser
 
 EXPOSE 8080
 
-CMD ["java", "-jar", "app.jar"]
+CMD ["java", "--enable-preview", "-jar", "app.jar"]
