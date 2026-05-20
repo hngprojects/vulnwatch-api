@@ -11,7 +11,7 @@ env:
   ECS_SERVICE: genderize-service
   ECS_CLUSTER: genderize-cluster
   ECS_TASK_DEFINITION: genderize-task
-  CONTAINER_NAME: genderize-container
+  CONTAINER_NAME: vulnwatch-api
 
 jobs:
   build-and-test:
