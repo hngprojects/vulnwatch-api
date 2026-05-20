@@ -207,6 +207,5 @@
   "memory": "2048",
   "registeredAt": "2026-05-20T14:10:22.664Z",
   "registeredBy": "arn:aws:iam::012834916544:user/genderize-admin",
-  "enableFaultInjection": false,
   "tags": []
 }
