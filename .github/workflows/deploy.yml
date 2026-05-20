@@ -1,47 +1,47 @@
 name: Build and Deploy
-
 on:
   pull_request:
     branches: [staging, main]
     types: [closed]
-    
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  
+
 jobs:
   deploy:
     if: github.event.pull_request.merged == true && github.event.repository.fork == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
-      name: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+      name: ${{ github.event.pull_request.base.ref == 'main' && 'production' || 'staging' }}
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up .NET 8
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-          
+
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
-          
+
       - name: Build .NET API
         run: dotnet publish api-dotnet/src/Web/Web.csproj -c Release -o ./dotnet-publish
-        
+
       - name: Build Java worker
         run: |
           cd worker-java
-          ./mvnw clean package -DskipTests
-          
+          mvn package -q -DskipTests
+
       - name: Archive .NET build
         run: tar -czf dotnet-build.tar.gz dotnet-publish
-        
+
       - name: Archive Java build
         run: tar -czf java-build.tar.gz worker-java/target
-        
+
       - name: Copy .NET build to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -49,8 +49,8 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: dotnet-build.tar.gz
-          target: ~/backend-build-artifacts/
-          
+          target: "/tmp"
+
       - name: Copy Java build to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -58,8 +58,8 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: java-build.tar.gz
-          target: ~/backend-build-artifacts/
-          
+          target: "/tmp"
+
       - name: Deploy on server
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -67,45 +67,151 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            if [ "${{ github.ref_name }}" = "main" ]; then
+            if [ "${{ github.event.pull_request.base.ref }}" = "main" ]; then
               DOTNET_DIR="/var/www/backend-production/publish"
               JAVA_DIR="/var/www/backend-production/worker-java/target"
+              WORKER_CWD="/var/www/backend-production/worker-java"
               API_NAME="api-production"
               WORKER_NAME="worker-production"
-              START_SCRIPT="/var/www/backend-production/start.sh"
+              API_START_SCRIPT="/var/www/backend-production/start.sh"
+              WORKER_START_SCRIPT="/var/www/backend-production/worker-java/start.sh"
+              API_PORT=5001
             else
               DOTNET_DIR="/var/www/backend-staging/publish"
               JAVA_DIR="/var/www/backend-staging/worker-java/target"
+              WORKER_CWD="/var/www/backend-staging/worker-java"
               API_NAME="api-staging"
               WORKER_NAME="worker-staging"
-              START_SCRIPT="/var/www/backend-staging/start.sh"
+              API_START_SCRIPT="/var/www/backend-staging/start.sh"
+              WORKER_START_SCRIPT="/var/www/backend-staging/worker-java/start.sh"
+              API_PORT=5000
             fi
-            
-            mkdir -p ~/backend-build-artifacts
-            mkdir -p $DOTNET_DIR
-            mkdir -p $JAVA_DIR
-            
-            # Deploy .NET API (clean first to avoid mixed DLLs)
-            rm -rf $DOTNET_DIR/*
-            tar -xzf ~/backend-build-artifacts/dotnet-build.tar.gz -C ~/backend-build-artifacts
-            cp -r ~/backend-build-artifacts/dotnet-publish/* $DOTNET_DIR/
-            
-            # Deploy Java worker (clean first)
-            rm -rf $JAVA_DIR/*
-            tar -xzf ~/backend-build-artifacts/java-build.tar.gz -C ~/backend-build-artifacts
-            cp -r ~/backend-build-artifacts/worker-java/target/* $JAVA_DIR/
-            
-            # Restart services
-            pm2 restart $API_NAME 2>/dev/null || pm2 start $START_SCRIPT --name "$API_NAME" --cwd $(dirname $START_SCRIPT)
-            JAR_FILE=$(ls $JAVA_DIR/*.jar | grep -v sources | head -1)
-            pm2 restart $WORKER_NAME 2>/dev/null || pm2 start "java -jar $JAR_FILE" --name "$WORKER_NAME"
+
+            DOTNET_BACKUP="${DOTNET_DIR}-backup"
+            JAVA_BACKUP="${JAVA_DIR}-backup"
+
+            # Backup current .NET version if it exists
+            if [ -d "$DOTNET_DIR" ] && [ "$(ls -A $DOTNET_DIR)" ]; then
+              echo "Backing up current .NET API..."
+              rm -rf "$DOTNET_BACKUP"
+              cp -r "$DOTNET_DIR" "$DOTNET_BACKUP"
+            else
+              echo "No existing .NET deployment found. Fresh deploy, no backup created."
+            fi
+
+            # Backup current Java version if it exists
+            if [ -d "$JAVA_DIR" ] && [ "$(ls -A $JAVA_DIR)" ]; then
+              echo "Backing up current Java worker..."
+              rm -rf "$JAVA_BACKUP"
+              cp -r "$JAVA_DIR" "$JAVA_BACKUP"
+            else
+              echo "No existing Java deployment found. Fresh deploy, no backup created."
+            fi
+
+            # Stop and delete existing PM2 processes
+            pm2 delete $API_NAME || true
+            pm2 delete $WORKER_NAME || true
+
+            # Wipe and recreate .NET deploy directory
+            rm -rf "$DOTNET_DIR"
+            mkdir -p "$DOTNET_DIR"
+
+            # Extract and deploy .NET build
+            tar -xzf /tmp/dotnet-build.tar.gz -C /tmp
+            cp -r /tmp/dotnet-publish/* "$DOTNET_DIR/"
+            rm -rf /tmp/dotnet-build.tar.gz /tmp/dotnet-publish
+
+            # Verify .NET build
+            if [ ! -f "$API_START_SCRIPT" ]; then
+              echo "ERROR: start.sh not found at $API_START_SCRIPT"
+              exit 1
+            fi
+
+            # Wipe and recreate Java deploy directory
+            rm -rf "$JAVA_DIR"
+            mkdir -p "$JAVA_DIR"
+
+            # Extract and deploy Java build
+            tar -xzf /tmp/java-build.tar.gz -C /tmp
+            cp -r /tmp/worker-java/target/* "$JAVA_DIR/"
+            rm -rf /tmp/java-build.tar.gz /tmp/worker-java
+
+            # Verify Java build
+            if [ ! -f "$WORKER_START_SCRIPT" ]; then
+              echo "ERROR: worker start.sh not found at $WORKER_START_SCRIPT"
+              exit 1
+            fi
+
+            JAR_FILE=$(ls $JAVA_DIR/*.jar 2>/dev/null | grep -v sources | head -1)
+            if [ -z "$JAR_FILE" ]; then
+              echo "ERROR: No JAR file found in $JAVA_DIR"
+              exit 1
+            fi
+
+            # Start .NET API with PM2
+            pm2 start $API_START_SCRIPT --name "$API_NAME" --cwd $(dirname $API_START_SCRIPT)
             pm2 save
-            
-            # Cleanup
-            rm -rf ~/backend-build-artifacts/dotnet-publish
-            rm -rf ~/backend-build-artifacts/worker-java
-            
-      - name: Clean up local artifacts
-        run: |
-          rm -f dotnet-build.tar.gz
-          rm -f java-build.tar.gz
+
+            # Start Java worker with PM2
+            pm2 start $WORKER_START_SCRIPT --name "$WORKER_NAME" --cwd "$WORKER_CWD"
+            pm2 save
+
+            # Health check for .NET API — retry 5 times, 3 seconds apart
+            echo "Running health check for .NET API..."
+            API_HEALTHY=false
+            for i in 1 2 3 4 5; do
+              sleep 3
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$API_PORT/health)
+              if [ "$STATUS" = "200" ]; then
+                API_HEALTHY=true
+                echo ".NET API health check passed on attempt $i (HTTP $STATUS)"
+                break
+              else
+                echo "Attempt $i: HTTP $STATUS, retrying..."
+              fi
+            done
+
+            if [ "$API_HEALTHY" = "false" ]; then
+              echo "Health check failed. .NET API did not respond."
+
+              # Rollback both services
+              pm2 delete $API_NAME || true
+              pm2 delete $WORKER_NAME || true
+
+              if [ -d "$DOTNET_BACKUP" ] && [ "$(ls -A $DOTNET_BACKUP)" ]; then
+                echo "Rolling back .NET API..."
+                rm -rf "$DOTNET_DIR"
+                cp -r "$DOTNET_BACKUP" "$DOTNET_DIR"
+                pm2 start $API_START_SCRIPT --name "$API_NAME" --cwd $(dirname $API_START_SCRIPT)
+                pm2 save
+                echo ".NET API rollback successful."
+              else
+                echo "No .NET backup available. This was a fresh deploy — API is down."
+              fi
+
+              if [ -d "$JAVA_BACKUP" ] && [ "$(ls -A $JAVA_BACKUP)" ]; then
+                echo "Rolling back Java worker..."
+                rm -rf "$JAVA_DIR"
+                cp -r "$JAVA_BACKUP" "$JAVA_DIR"
+                pm2 start $WORKER_START_SCRIPT --name "$WORKER_NAME" --cwd "$WORKER_CWD"
+                pm2 save
+                echo "Java worker rollback successful."
+              else
+                echo "No Java backup available. This was a fresh deploy — worker is down."
+              fi
+
+              exit 1
+            fi
+
+            # Cleanup backups after successful deploy
+            if [ -d "$DOTNET_BACKUP" ]; then
+              echo "Cleaning up .NET backup..."
+              rm -rf "$DOTNET_BACKUP"
+            fi
+
+            if [ -d "$JAVA_BACKUP" ]; then
+              echo "Cleaning up Java backup..."
+              rm -rf "$JAVA_BACKUP"
+            fi
+
+            pm2 list

@@ -29,16 +29,16 @@ public class ScansController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<Result<StartScanResponse>>> Create(
+    public async Task<ActionResult<Result<StartScanResponse>>> InitiateScan(
         [FromHeader(Name = "Idempotency-Key")] Guid idempotencyKey,
         [FromBody] StartScanRequest body)
     {
-        var command = new StartScanCommand(body.Domain, body.Coverage, idempotencyKey);
+        var command = new StartScanCommand(body.Domain, body.Coverage, body.SurfaceTypes, idempotencyKey);
         var result = await _mediator.Send(command);
         return result.ToHttpResponse(this);
     }
 
-    [HttpGet("{domainId:guid}/history")]
+    [HttpGet("{domainId:guid}/domain")]
     public async Task<ActionResult<Result<PagedResult<ScanSummary>>>> GetScanHistory(Guid domainId, [FromQuery] GetScanHistoryRequest request, CancellationToken ct)
     {
         var query = new GetScanHistoryQuery(domainId, request.Status, request.Coverage,
@@ -47,5 +47,12 @@ public class ScansController : ControllerBase
         var result = await _mediator.Send(query, ct);
         return result.ToHttpResponse(this);
 
+    }
+
+    [HttpGet("{scanId:guid}/report")]
+    public async Task<ActionResult<Result<ScanReportDto>>> GetReport(Guid scanId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetScanReportQuery(scanId), ct);
+        return result.ToHttpResponse(this);
     }
 }

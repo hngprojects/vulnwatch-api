@@ -10,6 +10,11 @@ namespace Infrastructure.Persistence.Repositories;
 public sealed class ScanRepository(VulnWatchDbContext db)
     : BaseRepository<Scan>(db), IScanRepository
 {
+    public Task<Scan?> FindByIdWithFindings(Guid scanId, CancellationToken ct) =>
+        Db.Scans
+            .Include(s => s.Domain)
+            .Include(s => s.Findings)
+            .FirstOrDefaultAsync(s => s.Id == scanId, ct);
     public Task<Scan?> FindRunningByDomain(Guid domainId, CancellationToken ct) =>
         Db.Scans
             .FirstOrDefaultAsync(s =>
