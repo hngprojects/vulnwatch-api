@@ -34,7 +34,7 @@ jobs:
       - name: Build Java worker
         run: |
           cd worker-java
-          ./mvnw clean package -DskipTests
+          mvn package -q -DskipTests
 
       - name: Archive .NET build
         run: tar -czf dotnet-build.tar.gz dotnet-publish

@@ -1,3 +1,0 @@
-ALTER TABLE users
-ADD COLUMN secret_key VARCHAR(255),
-ADD COLUMN two_factor_enabled BOOLEAN DEFAULT FALSE;
