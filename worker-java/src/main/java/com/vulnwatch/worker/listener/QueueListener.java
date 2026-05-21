@@ -1,26 +1,36 @@
 package com.vulnwatch.worker.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.vulnwatch.worker.config.AppConfig;
-import com.vulnwatch.worker.config.RedisConfig;
 import com.vulnwatch.worker.model.ScanJob;
 import com.vulnwatch.worker.processor.JobProcessor;
+import redis.clients.jedis.JedisPooled;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
+@Component
 public class QueueListener implements Runnable {
-    private final String queueName = AppConfig.get("redis.queue");
-    private final int blpopTimeout = AppConfig.getInt("worker.blpop.timeout");
+    private final String queueName;
+    private final int blpopTimeout;
     private final Map<String, JobProcessor> processors;
+    private final JedisPooled jedis;
     private final ObjectMapper mapper = new ObjectMapper();
     private final ExecutorService executor;
     private volatile boolean running = true;
 
-    public QueueListener(Map<String, JobProcessor> processors) {
+    public QueueListener(
+            JedisPooled jedisPooled,
+            Map<String, JobProcessor> processors,
+            @Value("${worker.blpop.timeout:5}") int blpopTimeout,
+            @Value("${worker.scanjob.queue:scan-jobs}") String queueName) {
+        this.jedis = jedisPooled;
         this.processors = processors;
+        this.blpopTimeout = blpopTimeout;
+        this.queueName = queueName;
         this.executor = Executors.newVirtualThreadPerTaskExecutor();
     }
 
@@ -29,15 +39,12 @@ public class QueueListener implements Runnable {
         System.out.println("Listening on queue: " + queueName);
         while (running) {
             try {
-                // JedisPooled manages the pool internally — no try-with-resource needed
-                List<String> result = RedisConfig.getClient().blpop(blpopTimeout, queueName);
-                if (result == null)
-                    continue;
+                List<String> result = jedis.blpop(blpopTimeout, queueName);
+                if (result == null) continue;
                 String payload = result.get(1);
                 executor.submit(() -> handle(payload));
             } catch (Exception e) {
                 System.err.println("Listener error: " + e.getMessage());
-                // brief pause before retrying to avoid tight error loops
                 try {
                     Thread.sleep(1000);
                 } catch (InterruptedException ie) {
@@ -48,7 +55,7 @@ public class QueueListener implements Runnable {
     }
 
     private void handle(String raw) {
-        System.out.println("Received job payload: " + raw); // log raw before parsing
+        System.out.println("Received job payload: " + raw);
         try {
             ScanJob job = mapper.readValue(raw, ScanJob.class);
             System.out.printf("Parsed job: scanId=%s domainId=%s scanType=%s%n",
@@ -63,7 +70,7 @@ public class QueueListener implements Runnable {
             processor.process(job);
         } catch (Exception e) {
             System.err.println("Failed to process job: " + e.getMessage());
-            e.printStackTrace(); // full stack trace instead of just the message
+            e.printStackTrace();
         }
     }
 

@@ -16,32 +16,44 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+@Component
 public class GroqAiEnricher {
 
     private static final String API_URL = "https://api.groq.com/openai/v1/chat/completions";
-    private static final String MODEL   = "llama-3.3-70b-versatile";
+    private static final String MODEL = "llama-3.3-70b-versatile";
 
     private final OkHttpClient http = new OkHttpClient();
     private final ObjectMapper mapper = JsonMapper.builder()
             .configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true)
             .build();
-    private final String apiKey = System.getenv("GROQ_API_KEY");
 
+    @Value("${groq.api.key}")
+    private String apiKey;
     /**
      * Enriches a single engine result with AI severity analysis.
      * Returns null on failure — caller must handle gracefully.
      */
     public AiResult enrich(ScanJob job, EngineResult engineResult) {
         try {
+            if (apiKey == null || apiKey.isBlank()) {
+                throw new IllegalStateException("Missing GROQ_API_KEY");
+            }
+
+            System.out.println("API KEY PRESENT = " + (apiKey != null));
+            System.out.println("API KEY LENGTH = " + (apiKey != null ? apiKey.length() : 0));
+
             String prompt = buildPrompt(job, engineResult);
 
             Map<String, Object> body = Map.of(
                     "model", MODEL,
                     "max_tokens", 800,
-                    "response_format", Map.of("type", "json_object"),  // Groq supports this
+                    "response_format", Map.of("type", "json_object"), // Groq supports this
                     "messages", List.of(
                             Map.of("role", "system", "content", systemPrompt()),
-                            Map.of("role", "user",   "content", prompt)));
+                            Map.of("role", "user", "content", prompt)));
 
             Request request = new Request.Builder()
                     .url(API_URL)
@@ -97,7 +109,8 @@ public class GroqAiEnricher {
                     .build();
 
             try (Response response = http.newCall(request).execute()) {
-                if (!response.isSuccessful()) return null;
+                if (!response.isSuccessful())
+                    return null;
                 return extractContent(response.body().string());
             }
         } catch (Exception e) {
@@ -193,10 +206,10 @@ public class GroqAiEnricher {
     }
 
     private String extractContent(String responseBody) throws Exception {
-        Map<?, ?> parsed  = mapper.readValue(responseBody, Map.class);
-        List<?>   choices = (List<?>) parsed.get("choices");
-        Map<?, ?>  first  = (Map<?, ?>) choices.get(0);
-        Map<?, ?>  message = (Map<?, ?>) first.get("message");
+        Map<?, ?> parsed = mapper.readValue(responseBody, Map.class);
+        List<?> choices = (List<?>) parsed.get("choices");
+        Map<?, ?> first = (Map<?, ?>) choices.get(0);
+        Map<?, ?> message = (Map<?, ?>) first.get("message");
         return (String) message.get("content");
     }
 

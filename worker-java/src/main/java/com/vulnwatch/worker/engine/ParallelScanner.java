@@ -6,6 +6,9 @@ import com.vulnwatch.worker.model.ScanJob;
 import java.util.List;
 import java.util.concurrent.StructuredTaskScope;
 
+import org.springframework.stereotype.Component;
+
+@Component
 public class ParallelScanner {
 
     private final List<ScanEngine> engines;
