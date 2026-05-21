@@ -1,0 +1,183 @@
+name: Deploy to AWS ECS Fargate
+
+on:
+  push:
+    branches: [fix/loginfix]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: eu-north-1
+  ECR_REPOSITORY: genderize
+  ECS_SERVICE: genderize-service
+  ECS_CLUSTER: genderize-cluster
+  ECS_TASK_DEFINITION: genderize-task
+  CONTAINER_NAME: vulnwatch-api
+
+jobs:
+  build-and-test:
+    name: Build and Test C# API
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore dependencies
+        run: dotnet restore api-dotnet
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore api-dotnet
+
+    #   - name: Test
+    #     run: dotnet test --configuration Release --no-build --verbosity normal
+
+      - name: Build Docker image (validation)
+        run: |
+          docker build -t genderize-api:${{ github.sha }} -f api-dotnet/Dockerfile api-dotnet
+          echo "Docker image built successfully"
+
+  deploy-to-ecs:
+    name: Deploy C# API to ECS
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    # if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.PIPELINE_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.PIPELINE_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f api-dotnet/Dockerfile api-dotnet
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Deployment summary
+        run: |
+          echo "Deployment completed successfully!"
+          echo "Region: ${{ env.AWS_REGION }}"
+          echo "Image: ${{ steps.build-image.outputs.image }}"
+          echo "Git SHA: ${{ github.sha }}"
+
+  build-worker:
+    name: Build and Test Java Worker
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: maven
+
+      - name: Build worker
+        run: mvn clean package -f worker-java/pom.xml
+
+      - name: Build Docker image (validation)
+        run: |
+          docker build -t fourteen-worker:${{ github.sha }} -f worker-java/Dockerfile worker-java
+          echo "Worker Docker image built successfully"
+
+  deploy-worker-to-ecs:
+    name: Deploy Java Worker to ECS
+    needs: build-worker
+    runs-on: ubuntu-latest
+    # if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    env:
+      WORKER_ECR_REPOSITORY: fourteen-worker
+      WORKER_ECS_SERVICE: vulnwatch-worker
+      WORKER_CONTAINER_NAME: fourteen-worker-container
+      WORKER_TASK_DEFINITION: fourteen-worker-task
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.PIPELINE_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.PIPELINE_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push worker image to Amazon ECR
+        id: build-worker-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$WORKER_ECR_REPOSITORY:$IMAGE_TAG -f worker-java/Dockerfile worker-java
+          docker tag $ECR_REGISTRY/$WORKER_ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$WORKER_ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$WORKER_ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$WORKER_ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$WORKER_ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition-worker.json
+          container-name: ${{ env.WORKER_CONTAINER_NAME }}
+          image: ${{ steps.build-worker-image.outputs.image }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.WORKER_ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Worker deployment summary
+        run: |
+          echo "Worker deployment completed successfully!"
+          echo "Region: ${{ env.AWS_REGION }}"
+          echo "Image: ${{ steps.build-worker-image.outputs.image }}"
+          echo "Git SHA: ${{ github.sha }}"
