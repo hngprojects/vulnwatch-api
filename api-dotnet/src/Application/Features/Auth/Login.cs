@@ -1,5 +1,4 @@
 using Application.Features.Auth.DTOs;
-using Application.Helpers;
 using Application.Interfaces;
 using Domain.Common;
 using Domain.Entities;
@@ -7,7 +6,6 @@ using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Options;
 
 namespace Application.Features.Auth;
 
@@ -30,14 +28,14 @@ public class LoginHandler : IRequestHandler<LoginCommand, Result<AuthResponse>>
 {
     private readonly UserManager<User> _userManager;
     private readonly IRefreshTokenRepository _refreshTokenRepo;
-    private readonly JwtConfig _config;
+    private readonly IConfiguration _config;
     private readonly IJwtService _jwt;
 
-    public LoginHandler(UserManager<User> userManager, IRefreshTokenRepository refreshTokenRepo, IOptions<JwtConfig> config, IJwtService jwt)
+    public LoginHandler(UserManager<User> userManager, IRefreshTokenRepository refreshTokenRepo, IConfiguration config, IJwtService jwt)
     {
         _userManager = userManager;
         _refreshTokenRepo = refreshTokenRepo;
-        _config = config.Value;
+        _config = config;
         _jwt = jwt;
     }
 
@@ -53,7 +51,7 @@ public class LoginHandler : IRequestHandler<LoginCommand, Result<AuthResponse>>
         var accessToken = _jwt.GenerateToken(user);
         var refreshToken = _jwt.GenerateRefreshToken();
 
-        var refreshTokenExpiryInDays = DateTime.UtcNow.AddDays(_config.RefreshTokenExpiryDays);
+        var refreshTokenExpiryInDays = DateTime.UtcNow.AddMinutes(int.Parse(_config["Jwt:RefreshTokenExpiryDays"]!));
 
         await _refreshTokenRepo.AddAsync(
                 RefreshToken.Create(user.Id, refreshToken, refreshTokenExpiryInDays),
