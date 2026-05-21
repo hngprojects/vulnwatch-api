@@ -231,16 +231,26 @@ if (corsSettings?.AllowedOrigins is null ||
     throw new InvalidOperationException("CORS AllowedOrigins is not configured.");
 }
 
+// builder.Services.AddCors(options =>
+// {
+
+//     options.AddPolicy("DefaultCors", policy =>
+//     {
+//         policy
+//             .WithOrigins(corsSettings.AllowedOrigins)
+//             .AllowAnyHeader()
+//             .AllowAnyMethod()
+//             .AllowCredentials();
+//     });
+// });
 builder.Services.AddCors(options =>
 {
-
     options.AddPolicy("DefaultCors", policy =>
     {
         policy
-            .WithOrigins(corsSettings.AllowedOrigins)
+            .AllowAnyOrigin()
             .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials();
+            .AllowAnyMethod();
     });
 });
 
@@ -257,6 +267,9 @@ builder.Services.AddHealthChecks()
         tags: ["cache", "ready"]);
 
 var app = builder.Build();
+
+app.Logger.LogInformation("CORS AllowedOrigins: {Origins}", 
+    string.Join(", ", corsSettings.AllowedOrigins));
 
 using (var scope = app.Services.CreateScope())
 {
