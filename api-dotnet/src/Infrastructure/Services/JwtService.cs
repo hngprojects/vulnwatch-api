@@ -14,18 +14,16 @@ namespace Infrastructure.Services;
 public class JwtService : IJwtService
 {
     private readonly IConfiguration _config;
-    private readonly JwtConfig _jwtConfig;
 
-    public JwtService(IConfiguration config, IOptions<JwtConfig> jwtConfig)
+    public JwtService(IConfiguration config)
     {
         _config = config;
-        _jwtConfig = jwtConfig.Value;
     }
 
     public string GenerateToken(User user)
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtConfig.SecretKey));
-        var expireMinutes = _jwtConfig.AccessTokenExpiryMinutes;
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:SecretKey"]!));
+        var expireMinutes = int.Parse(_config["Jwt:ExpireInMinute"] ?? "60")!;
 
         var claims = new[]
         {
@@ -34,8 +32,8 @@ public class JwtService : IJwtService
         };
 
         var token = new JwtSecurityToken(
-            issuer: _jwtConfig.Issuer,
-            audience: _jwtConfig.Audience,
+            issuer: _config["Jwt:Issuer"],
+            audience: _config["Jwt:Audience"],
             claims: claims,
             expires: DateTime.UtcNow.AddMinutes(expireMinutes),
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
@@ -53,9 +51,9 @@ public class JwtService : IJwtService
 
     public Result<TokenClaims> ValidateAccessToken(string token)
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtConfig.SecretKey));
-        var issuer = _jwtConfig.Issuer;
-        var audience = _jwtConfig.Audience;
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:SecretKey"]!));
+        var issuer = _config["Jwt:Issuer"]!;
+        var audience = _config["Jwt:Audience"]!;
         var handler = new JwtSecurityTokenHandler();
 
         var validationParams = new TokenValidationParameters
@@ -99,3 +97,6 @@ public class JwtService : IJwtService
         }
     }
 }
+
+
+

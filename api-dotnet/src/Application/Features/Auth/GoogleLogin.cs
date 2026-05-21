@@ -1,5 +1,4 @@
 using Application.Features.Auth.DTOs;
-using Application.Helpers;
 using Application.Interfaces;
 using Domain.Common;
 using Domain.Entities;
@@ -8,7 +7,6 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace Application.Features.Auth;
 
@@ -21,7 +19,7 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
     private readonly INotificationPreferencesRepository _notifPrefs;
     private readonly IGoogleTokenVerifier _googleTokenVerifier;
     private readonly IJwtService _jwt;
-    private readonly JwtConfig _config;
+    private readonly IConfiguration _config;
     private readonly ILogger<GoogleLoginHandler> _logger;
 
     public GoogleLoginHandler(
@@ -30,7 +28,7 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
         INotificationPreferencesRepository notifPrefs,
         IGoogleTokenVerifier googleTokenVerifier,
         IJwtService jwt,
-        IOptions<JwtConfig> config,
+        IConfiguration config,
         ILogger<GoogleLoginHandler> logger)
     {
         _userManager = userManager;
@@ -38,7 +36,7 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
         _notifPrefs = notifPrefs;
         _googleTokenVerifier = googleTokenVerifier;
         _jwt = jwt;
-        _config = config.Value;
+        _config = config;
         _logger = logger;
     }
 
@@ -105,7 +103,7 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
 
         var accessToken = _jwt.GenerateToken(user);
         var refreshToken = _jwt.GenerateRefreshToken();
-        var expireDays = _config.RefreshTokenExpiryDays;
+        var expireDays = int.Parse(_config["Jwt:RefreshTokenExpiryDays"] ?? "7")!;
 
         var refreshTokenExpiryInDays = DateTime.UtcNow.AddDays(expireDays);
 
