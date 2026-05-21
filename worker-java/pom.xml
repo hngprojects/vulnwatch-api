@@ -21,6 +21,7 @@
 
     <properties>
         <java.version>21</java.version>
+		<netty.version>4.1.133.Final</netty.version>
 
         <!-- Explicitly override vulnerable transitive dependencies -->
         <postgresql.version>42.7.11</postgresql.version>
