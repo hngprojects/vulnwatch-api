@@ -1,24 +1,11 @@
 package com.vulnwatch.worker;
 
-import com.vulnwatch.worker.listener.QueueListener;
-import com.vulnwatch.worker.processor.*;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-import java.util.Map;
-
+@SpringBootApplication
 public class Application {
     public static void main(String[] args) {
-        Map<String, JobProcessor> processors = Map.of(
-            "Domain", new RetryableProcessor(new ScanJobProcessor()),
-            "Repository",  new RetryableProcessor(new RepositoryJobProcessor())
-        );
-
-        QueueListener listener = new QueueListener(processors);
-
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("Shutting down...");
-            listener.stop();
-        }));
-
-        listener.run();
+        SpringApplication.run(Application.class, args);
     }
 }

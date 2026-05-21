@@ -1,4 +1,4 @@
-package com.vulnwatch.worker.repository;
+package com.vulnwatch.worker.persistence;
 
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;

@@ -1,7 +1,6 @@
 package com.vulnwatch.worker.processor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.vulnwatch.worker.config.AppConfig;
 import com.vulnwatch.worker.config.RedisConfig;
 import com.vulnwatch.worker.model.ScanJob;
 
@@ -9,7 +8,7 @@ public class RetryableProcessor implements JobProcessor {
 
     private static final int    MAX_ATTEMPTS   = 3;
     private static final long   BASE_DELAY_MS  = 2_000L; // 2s → 4s → 8s
-    private static final String DLQ_KEY        = AppConfig.get("redis.dlq");
+    private static final String DLQ_KEY        = "dead-letter";
 
     private final JobProcessor   delegate;
     private final ObjectMapper   mapper = new ObjectMapper();

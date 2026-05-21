@@ -1,7 +1,7 @@
 package com.vulnwatch.worker.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.vulnwatch.worker.config.AppConfig;
+// import com.vulnwatch.worker.config.AppConfig;
 import com.vulnwatch.worker.config.RedisConfig;
 import com.vulnwatch.worker.model.ScanJob;
 import com.vulnwatch.worker.processor.JobProcessor;
@@ -10,17 +10,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
+@Component
 public class QueueListener implements Runnable {
-    private final String queueName = AppConfig.get("redis.queue");
-    private final int blpopTimeout = AppConfig.getInt("worker.blpop.timeout");
+    private final String queueName;
+    private final int blpopTimeout;
     private final Map<String, JobProcessor> processors;
     private final ObjectMapper mapper = new ObjectMapper();
     private final ExecutorService executor;
     private volatile boolean running = true;
 
-    public QueueListener(Map<String, JobProcessor> processors) {
+    public QueueListener(
+            Map<String, JobProcessor> processors,
+            @Value("${worker.blpop.timeout:5}") int blpopTimeout,
+            @Value("${worker.scanjob.queue:scan-jobs}") String queueName) {
         this.processors = processors;
+        this.blpopTimeout = blpopTimeout;
+        this.queueName = queueName;
         this.executor = Executors.newVirtualThreadPerTaskExecutor();
     }
 

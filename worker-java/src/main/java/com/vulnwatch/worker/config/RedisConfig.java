@@ -8,19 +8,22 @@ import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import redis.clients.jedis.Connection;
 
 public class RedisConfig {
+
     private static final JedisPooled client;
 
     static {
-        HostAndPort hostAndPort = new HostAndPort(
-            AppConfig.get("redis.host"),
-            AppConfig.getInt("redis.port")
-        );
+        String host     = requireEnv("REDIS_HOST");
+        int    port     = Integer.parseInt(requireEnv("REDIS_PORT"));
+        String password = requireEnv("REDIS_PASSWORD");
+
+        HostAndPort hostAndPort = new HostAndPort(host, port);
 
         JedisClientConfig clientConfig = DefaultJedisClientConfig.builder()
-            .ssl(true)
-            .socketTimeoutMillis(5000)
-            .connectionTimeoutMillis(3000)
-            .build();
+                .ssl(true)
+                .password(password)
+                .socketTimeoutMillis(5000)
+                .connectionTimeoutMillis(3000)
+                .build();
 
         GenericObjectPoolConfig<Connection> poolConfig = new GenericObjectPoolConfig<>();
         poolConfig.setMaxTotal(10);
@@ -32,5 +35,15 @@ public class RedisConfig {
 
     public static JedisPooled getClient() {
         return client;
+    }
+
+    private static String requireEnv(String key) {
+        String value = System.getenv(key);
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(
+                "Required environment variable not set: " + key
+            );
+        }
+        return value;
     }
 }

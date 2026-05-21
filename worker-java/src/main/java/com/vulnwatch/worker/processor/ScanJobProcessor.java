@@ -3,8 +3,8 @@ package com.vulnwatch.worker.processor;
 import com.vulnwatch.worker.ai.GroqAiEnricher;
 import com.vulnwatch.worker.engine.ParallelScanner;
 import com.vulnwatch.worker.model.*;
+import com.vulnwatch.worker.persistence.FindingPersistenceService;
 import com.vulnwatch.worker.publisher.ScanResultPublisher;
-import com.vulnwatch.worker.repository.FindingPersistenceService;
 
 import java.util.ArrayList;
 import java.util.List;
