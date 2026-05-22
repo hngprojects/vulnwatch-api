@@ -8,5 +8,5 @@ public record ScanResult(
     String domainName,
     String requestedBy,
     int securityScore,
-    List<Finding> findings
+    List<DomainFinding> findings
 ) {}

@@ -7,9 +7,10 @@ public class User : IdentityUser<Guid>
     public string? FirstName { get; private set; }
     public string? LastName { get; private set; }
     public string? GoogleId { get; private set; }
+    public string? ProfilePictureUrl { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
-
+ 
     public static User Create(string email, string? firstName = null, string? lastName = null) => new()
     {
         Id = Guid.NewGuid(),
@@ -42,6 +43,24 @@ public class User : IdentityUser<Guid>
         Touch();
         return true;
     }
+
+    public void UpdateProfile(string? firstName, string? lastName, string? profilePictureUrl = null)
+    {
+        var changed = false;
+
+        if (!string.Equals(FirstName, firstName, StringComparison.Ordinal))
+        { FirstName = firstName; changed = true; }
+
+        if (!string.Equals(LastName, lastName, StringComparison.Ordinal))
+        { LastName = lastName; changed = true; }
+
+        if (profilePictureUrl is not null &&
+            !string.Equals(ProfilePictureUrl, profilePictureUrl, StringComparison.Ordinal))
+        { ProfilePictureUrl = profilePictureUrl; changed = true; }
+
+        if (changed) Touch();
+    }
+
 
     public bool UpdateEmailAddress(string email)
     {

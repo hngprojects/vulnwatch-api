@@ -20,9 +20,13 @@ public record ScanReportDto(
 );
 
 public record ScanSummaryDto(
-    List<string> CriticalIssues,
-    List<string> HighSeverityIssues,
-    string? GoodNews
+    List<FindingItemDto> CriticalIssues,
+    List<FindingItemDto> HighSeverityIssues,
+    List<FindingItemDto> MediumSeverityIssues,
+    List<FindingItemDto> LowSeverityIssues,
+    string GoodNews,
+    string? TopRecommendation,
+    string Headline
 );
 
 public record FindingGroupsDto(
@@ -41,6 +45,9 @@ public record SubScoresDto(
 
 public record SubScoreItem(
     int Score,
-    string Status,    // "Critical" | "Pass" | "Warning"
-    string? Detail
+    string Status,
+    string Title,
+    string Explanation,
+    List<string> RemediationSteps,
+    object? TechnicalDetail  // deserialized from TechnicalPayload JSON
 );

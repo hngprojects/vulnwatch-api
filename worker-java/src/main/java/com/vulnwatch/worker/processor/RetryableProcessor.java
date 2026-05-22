@@ -1,21 +1,23 @@
 package com.vulnwatch.worker.processor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.vulnwatch.worker.config.AppConfig;
-import com.vulnwatch.worker.config.RedisConfig;
 import com.vulnwatch.worker.model.ScanJob;
+import redis.clients.jedis.JedisPooled;
 
 public class RetryableProcessor implements JobProcessor {
 
-    private static final int    MAX_ATTEMPTS   = 3;
-    private static final long   BASE_DELAY_MS  = 2_000L; // 2s → 4s → 8s
-    private static final String DLQ_KEY        = AppConfig.get("redis.dlq");
+    private static final int  MAX_ATTEMPTS  = 3;
+    private static final long BASE_DELAY_MS = 2_000L;
 
-    private final JobProcessor   delegate;
-    private final ObjectMapper   mapper = new ObjectMapper();
+    private final JobProcessor delegate;
+    private final JedisPooled  jedis;
+    private final String       dlqKey;
+    private final ObjectMapper mapper = new ObjectMapper();
 
-    public RetryableProcessor(JobProcessor delegate) {
+    public RetryableProcessor(JobProcessor delegate, JedisPooled jedisPooled, String dlqKey) {
         this.delegate = delegate;
+        this.jedis    = jedisPooled;
+        this.dlqKey   = dlqKey;
     }
 
     @Override
@@ -31,7 +33,7 @@ public class RetryableProcessor implements JobProcessor {
                     Thread.sleep(delay);
                 }
                 delegate.process(job);
-                return; // success — done
+                return;
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 return;
@@ -42,14 +44,13 @@ public class RetryableProcessor implements JobProcessor {
             }
         }
 
-        // All attempts exhausted — send to DLQ
         pushToDlq(job, lastException);
     }
 
     private void pushToDlq(ScanJob job, Exception cause) {
         try {
             String payload = mapper.writeValueAsString(job);
-            RedisConfig.getClient().lpush(DLQ_KEY, payload);
+            jedis.lpush(dlqKey, payload);
             System.err.printf("[DLQ] %s → pushed after %d failed attempts. Reason: %s%n",
                 job.scanId(), MAX_ATTEMPTS, cause != null ? cause.getMessage() : "unknown");
         } catch (Exception e) {
