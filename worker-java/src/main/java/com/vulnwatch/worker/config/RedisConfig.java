@@ -24,16 +24,16 @@ import java.time.Duration;
 @Configuration
 public class RedisConfig {
 
-    @Value("${REDIS_HOST:localhost}")
+    @Value("${redis.host}")
     private String host;
 
-    @Value("${REDIS_PORT:6379}")
+    @Value("${redis.port}")
     private int port;
 
-    @Value("${REDIS_PASSWORD:}")
+    @Value("${redis.password:}")
     private String password;
 
-    @Value("${REDIS_SSL:false}")
+    @Value("${redis.ssl}")
     private boolean ssl;
 
     @Bean
