@@ -24,13 +24,30 @@ using Application.Behaviours;
 using DnsClient;
 using Web.Configurations;
 using Web.Hubs;
+using Serilog;
+using Web.Workers;
+using Web.Consumers;
+using Application.Services;
 
 LoadDotEnv();
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Logging.ClearProviders();
-builder.Logging.AddConsole();
+builder.Host.UseSerilog((ctx, config) =>
+{
+    config
+        .MinimumLevel.Information()
+        .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
+        .MinimumLevel.Override("Microsoft.EntityFrameworkCore", Serilog.Events.LogEventLevel.Warning)
+        .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+        .MinimumLevel.Override("StackExchange.Redis", Serilog.Events.LogEventLevel.Warning)
+        .Enrich.FromLogContext()
+        .Enrich.WithMachineName()
+        .Enrich.WithProcessId()
+        .Enrich.WithThreadId()
+        .WriteTo.Console(
+            outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}");
+});
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -42,6 +59,10 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    options.IncludeXmlComments(xmlPath);
+
     options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -196,7 +217,13 @@ builder.Services.AddSingleton<LookupClient>(_ =>
             );
 builder.Services.AddScoped<IDnsResolver, DnsResolver>();
 builder.Services.AddSignalR();
-builder.Services.AddHostedService<ScanResultConsumer>();
+// builder.Services.AddHostedService<ScanResultConsumer>();
+builder.Services.AddHostedService<DomainIntelConsumer>();
+builder.Services.AddScoped<IAlertRepository, AlertRepository>();
+builder.Services.AddHostedService<AlertOutboxProcessor>();
+builder.Services.AddScoped<AlertDispatcher>();
+builder.Services.AddHostedService<SslExpiryChecker>();
+builder.Services.AddScoped<INotificationPreferencesRepository, NotificationPreferencesRepository>();
 
 var corsSettings = builder.Configuration
     .GetSection("Cors")
@@ -250,6 +277,7 @@ app.UseSwaggerUI(options =>
 });
 app.UseHttpsRedirection();
 app.UseCors("DefaultCors");
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthentication();
 app.UseMiddleware<JwtMiddleware>();
 app.UseRateLimiter();

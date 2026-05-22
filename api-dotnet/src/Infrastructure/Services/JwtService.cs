@@ -23,7 +23,7 @@ public class JwtService : IJwtService
     public string GenerateToken(User user)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:SecretKey"]!));
-        var expireMinutes = int.Parse(_config["Jwt:ExpireInMinute"]!);
+        var expireMinutes = int.Parse(_config["Jwt:ExpireInMinute"] ?? "60")!;
 
         var claims = new[]
         {

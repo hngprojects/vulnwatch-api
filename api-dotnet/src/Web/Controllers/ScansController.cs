@@ -28,12 +28,18 @@ public class ScansController : ControllerBase
         _mediator = mediator;
     }
 
+    /// <summary>
+    /// Starts a vulnerability scan for a domain.
+    /// </summary>
+    /// <param name="idempotencyKey">A unique key to prevent duplicate scan requests.</param>
+    /// <param name="body">Scan request payload.</param>
+    /// <returns>The created scan job.</returns>
     [HttpPost]
-    public async Task<ActionResult<Result<StartScanResponse>>> Create(
+    public async Task<ActionResult<Result<StartScanResponse>>> InitiateScan(
         [FromHeader(Name = "Idempotency-Key")] Guid idempotencyKey,
         [FromBody] StartScanRequest body)
     {
-        var command = new StartScanCommand(body.Domain, body.Coverage, idempotencyKey);
+        var command = new StartScanCommand(body.Domain, body.Coverage, body.SurfaceTypes, idempotencyKey);
         var result = await _mediator.Send(command);
         return result.ToHttpResponse(this);
     }
@@ -47,5 +53,12 @@ public class ScansController : ControllerBase
         var result = await _mediator.Send(query, ct);
         return result.ToHttpResponse(this);
 
+    }
+
+    [HttpGet("{scanId:guid}/report")]
+    public async Task<ActionResult<Result<ScanReportDto>>> GetReport(Guid scanId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetScanReportQuery(scanId), ct);
+        return result.ToHttpResponse(this);
     }
 }

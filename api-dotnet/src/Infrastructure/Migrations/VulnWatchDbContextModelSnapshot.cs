@@ -22,6 +22,74 @@ namespace Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Domain.Entities.Alert", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Channel")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeduplicationKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("DomainId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<int>("NumRetries")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Severity")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Channel", "CreatedAt")
+                        .HasDatabaseName("IX_Alerts_Pending_Channel_CreatedAt")
+                        .HasFilter("\"Status\" = 'Pending'");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .HasDatabaseName("IX_Alerts_UserId_CreatedAt");
+
+                    b.HasIndex("UserId", "Type", "DomainId", "DeduplicationKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Alerts_Deduplication");
+
+                    b.ToTable("Alerts");
+                });
+
             modelBuilder.Entity("Domain.Entities.Finding", b =>
                 {
                     b.Property<Guid>("Id")
@@ -67,7 +135,8 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ScanId");
+                    b.HasIndex("ScanId", "Severity", "Status")
+                        .HasDatabaseName("IX_Findings_ScanId_Severity_Status");
 
                     b.ToTable("Findings");
                 });
@@ -101,7 +170,8 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId", "Status")
+                        .HasDatabaseName("IX_Integrations_UserId_Status");
 
                     b.ToTable("Integrations");
                 });
@@ -143,7 +213,8 @@ namespace Infrastructure.Migrations
                     b.HasIndex("RepoId")
                         .IsUnique();
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_MonitoredRepositories_UserId");
 
                     b.ToTable("MonitoredRepositories");
                 });
@@ -174,7 +245,9 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_NotificationPreferences_UserId");
 
                     b.ToTable("NotificationPreferences");
                 });
@@ -246,7 +319,8 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("FindingId");
+                    b.HasIndex("FindingId", "Status")
+                        .HasDatabaseName("IX_Remediations_FindingId_Status");
 
                     b.ToTable("Remediations");
                 });
@@ -284,6 +358,9 @@ namespace Infrastructure.Migrations
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int>("SurfaceTypes")
+                        .HasColumnType("integer");
 
                     b.Property<string>("TargetType")
                         .IsRequired()
@@ -408,6 +485,9 @@ namespace Infrastructure.Migrations
                     b.Property<bool>("PhoneNumberConfirmed")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("ProfilePictureUrl")
+                        .HasColumnType("text");
+
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
 
@@ -488,6 +568,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("IX_WebHookOutBox_Pending_CreatedAt")
+                        .HasFilter("\"Status\" = 'Pending'");
 
                     b.ToTable("WebHookOutBox");
                 });

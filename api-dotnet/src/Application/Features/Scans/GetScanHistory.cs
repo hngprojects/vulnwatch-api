@@ -11,6 +11,7 @@ public record ScanSummary(
     Guid? DomainId,
     string DomainName,
     ScanStatus Status,
+    string RiskLevel,
     ScanCoverage Coverage,
     DateTime CreatedAt,
     DateTime? CompletedAt);
@@ -63,6 +64,7 @@ public class GetScanHistoryHandler(
             s.DomainId,
             s.Domain?.DomainName ?? string.Empty,
             s.Status,
+            ClassifyRisk(s.SecurityScore),
             s.Coverage,
             s.CreatedAt,
             s.CompletedAt)).ToList();
@@ -78,4 +80,11 @@ public class GetScanHistoryHandler(
                 ctx.Request.Path,
                 ctx.Request.QueryString.ToString()));
     }
+
+    private static string ClassifyRisk(int? score) => score switch
+    {
+        >= 80 => "Low",
+        >= 60 => "High",
+        _ => "Critical"
+    };
 }
