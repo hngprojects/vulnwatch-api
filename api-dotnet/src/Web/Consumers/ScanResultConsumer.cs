@@ -64,11 +64,16 @@ public class ScanResultConsumer : BackgroundService
                     continue;
                 }
 
+                var raw = result.ToString();
+                _logger.LogInformation("Raw scan result payload: {Payload}", raw);
+
                 var message = JsonSerializer.Deserialize<ScanResultMessage>(
-                    result!, new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    });
+                    raw, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                // var message = JsonSerializer.Deserialize<ScanResultMessage>(
+                //     result!, new JsonSerializerOptions
+                //     {
+                //         PropertyNameCaseInsensitive = true
+                //     });
 
                 if (message is null) continue;
 
