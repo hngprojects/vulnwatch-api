@@ -27,6 +27,7 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<ActionResult<Result<MessageResponse>>> Register(RegisterRequest request)
     {
+        var origin = GetClientOrigin();
         var result = await _mediator.Send(new RegisterCommand(request.Email, request.Password, request.FirstName, request.LastName));
         return result.ToHttpResponse(this);
     }
@@ -89,5 +90,32 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(new ResetPasswordCommand(request.Email, request.Token, request.NewPassword));
         return result.ToHttpResponse(this);
+    }
+
+    private string? GetClientOrigin()
+    {
+        // Try Origin header first (standard for CORS)
+        if (Request.Headers.TryGetValue("Origin", out var origin))
+            return origin.ToString();
+
+        // Try Referer header
+        if (Request.Headers.TryGetValue("Referer", out var referer))
+        {
+            var uri = new Uri(referer.ToString());
+            return $"{uri.Scheme}://{uri.Host}{(uri.IsDefaultPort ? "" : $":{uri.Port}")}";
+        }
+
+        // Construct from X-Forwarded-Proto and Host (for proxied requests)
+        if (Request.Headers.TryGetValue("X-Forwarded-Proto", out var proto) &&
+            Request.Headers.TryGetValue("X-Forwarded-Host", out var host))
+        {
+            return $"{proto}://{host}";
+        }
+
+        // Fallback to request scheme and host
+        if (Request.Host.HasValue)
+            return $"{Request.Scheme}://{Request.Host}";
+
+        return null;
     }
 }

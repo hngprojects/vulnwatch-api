@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Features.Auth;
 
-public record RegisterCommand(string Email, string Password, string? FirstName = null, string? LastName = null) : IRequest<Result<MessageResponse>>;
+public record RegisterCommand(string Email, string Password, string? FirstName = null, string? LastName = null, string? OriginUrl = null) : IRequest<Result<MessageResponse>>;
 
 public class RegisterHandler(
     UserManager<User> userManager,
@@ -39,9 +39,14 @@ public class RegisterHandler(
 
         var encodedToken = WebUtility.UrlEncode(verificationToken);
 
-        var verificationLink = $"{config["FrontendUrl:Verify"]}/?userId={user.Id}&token={encodedToken}";
+        var baseUrl = !string.IsNullOrWhiteSpace(cmd.OriginUrl)
+            ? cmd.OriginUrl
+            : config["FrontendUrl:Verify"];
 
-        logger.LogInformation("VERIFICATION LINK: {link}", verificationLink);
+
+        var verificationLink = $"{baseUrl}/?userId={user.Id}&token={encodedToken}";
+
+        // logger.LogInformation("VERIFICATION LINK: {link}", verificationLink);
 
         var displayName = string.IsNullOrWhiteSpace(user.FirstName)
             ? user.Email!
