@@ -24,10 +24,13 @@ public class AuthController : ControllerBase
         return result.ToHttpResponse(this);
     }
 
-    [HttpPost("login")]
-    public async Task<ActionResult<Result<AuthResponse>>> Login(LoginRequest request)
+    [HttpGet("verify")]
+    public async Task<ActionResult<Result<MessageResponse>>> VerifyToken(
+        [FromQuery] string userId,
+        [FromQuery] string token,
+        CancellationToken ct)
     {
-        var result = await _mediator.Send(new LoginCommand(request.Email, request.Password));
+        var result = await _mediator.Send(new VerifyTokenCommand(userId, token), ct);
         return result.ToHttpResponse(this);
     }
 
@@ -38,6 +41,13 @@ public class AuthController : ControllerBase
         return result.ToHttpResponse(this);
     }
 
+    [HttpPost("login")]
+    public async Task<ActionResult<Result<AuthResponse>>> Login(LoginRequest request)
+    {
+        var result = await _mediator.Send(new LoginCommand(request.Email, request.Password));
+        return result.ToHttpResponse(this);
+    }
+
     [HttpPost("google")]
     public async Task<ActionResult<Result<AuthResponse>>> GoogleLogin(GoogleLoginRequest request)
     {
@@ -45,13 +55,10 @@ public class AuthController : ControllerBase
         return result.ToHttpResponse(this);
     }
 
-    [HttpGet("verify")]
-    public async Task<ActionResult<Result<MessageResponse>>> VerifyToken(
-        [FromQuery] string userId,
-        [FromQuery] string token,
-        CancellationToken ct)
+    [HttpPost("change-password")]
+    public async Task<ActionResult<Result<MessageResponse>>> ChangePassword(ChangePasswordRequest request)
     {
-        var result = await _mediator.Send(new VerifyTokenCommand(userId, token), ct);
+        var result = await _mediator.Send(new ChangePasswordCommand(request.CurrentPassword, request.NewPassword, request.ConfirmNewPassword));
         return result.ToHttpResponse(this);
     }
 

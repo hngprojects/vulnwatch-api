@@ -5,6 +5,7 @@ using Domain.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -12,44 +13,35 @@ namespace Application.Features.Auth;
 
 public record RegisterCommand(string Email, string Password, string? FirstName = null, string? LastName = null) : IRequest<Result<MessageResponse>>;
 
-public class RegisterHandler : IRequestHandler<RegisterCommand, Result<MessageResponse>>
+public class RegisterHandler(
+    UserManager<User> userManager,
+    INotificationPreferencesRepository notifPrefs,
+    IEmailService email,
+    IConfiguration config,
+    ILogger<RegisterHandler> logger) : IRequestHandler<RegisterCommand, Result<MessageResponse>>
 {
-    private readonly UserManager<User> _userManager;
-    private readonly IJwtService _jwt;
-    private readonly IEmailService _email;
-    private readonly IConfiguration _config;
-
-    private readonly ILogger<RegisterHandler> _logger;
-
-
-    public RegisterHandler(UserManager<User> userManager, IJwtService jwt, IEmailService email, IConfiguration config, ILogger<RegisterHandler> logger)
-    {
-        _userManager = userManager;
-        _jwt = jwt;
-        _email = email;
-        _config = config;
-        _logger = logger;
-    }
 
     public async Task<Result<MessageResponse>> Handle(RegisterCommand cmd, CancellationToken ct)
     {
-        var existing = await _userManager.FindByEmailAsync(cmd.Email);
+        var existing = await userManager.FindByEmailAsync(cmd.Email);
         if (existing is not null)
             return Result<MessageResponse>.Failure(Error.Conflict("Email is already registered."));
 
         var user = User.Create(cmd.Email, cmd.FirstName, cmd.LastName);
-        var result = await _userManager.CreateAsync(user, cmd.Password);
+        var result = await userManager.CreateAsync(user, cmd.Password);
 
         if (!result.Succeeded)
             return Result<MessageResponse>.Failure(Error.Validation(result.Errors.First().Description));
 
-        var verificationToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+        await TryCreateDefaultPrefsAsync(user.Id, ct);
+
+        var verificationToken = await userManager.GenerateEmailConfirmationTokenAsync(user);
 
         var encodedToken = WebUtility.UrlEncode(verificationToken);
 
-        var verificationLink = $"{_config["FrontendUrl:Verify"]}/?userId={user.Id}&token={encodedToken}";
+        var verificationLink = $"{config["FrontendUrl:Verify"]}/?userId={user.Id}&token={encodedToken}";
 
-        _logger.LogInformation("VERIFICATION LINK: {link}", verificationLink);
+        logger.LogInformation("VERIFICATION LINK: {link}", verificationLink);
 
         var displayName = string.IsNullOrWhiteSpace(user.FirstName)
             ? user.Email!
@@ -57,9 +49,25 @@ public class RegisterHandler : IRequestHandler<RegisterCommand, Result<MessageRe
 
         var body = BuildVerificationEmailBody(displayName, verificationLink);
 
-        await _email.SendAsync(user.Email!, "Verify Your Email", body);
+        await email.SendAsync(user.Email!, "Verify Your Email", body);
 
         return Result<MessageResponse>.Success(MessageResponse.Create("Registration successful. Verification link has been sent to your email."));
+    }
+
+    private async Task TryCreateDefaultPrefsAsync(Guid userId, CancellationToken ct)
+    {
+        try
+        {
+            var prefs = NotificationPreferences.Create(userId, emailAlerts: true);
+            await notifPrefs.AddAsync(prefs, ct);
+            await notifPrefs.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex)
+            when (ex.InnerException?.GetType().FullName == "Npgsql.PostgresException" &&
+                ex.InnerException.GetType().GetProperty("SqlState")?.GetValue(ex.InnerException) as string == "23505")
+        {
+            // Already seeded — no-op
+        }
     }
 
     private string BuildVerificationEmailBody(string userName, string verificationLink)
