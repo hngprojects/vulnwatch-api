@@ -1,4 +1,4 @@
-package com.vulnwatch.worker.engine;
+package com.vulnwatch.worker.engine.domain;
 
 import com.vulnwatch.worker.model.EngineResult;
 import com.vulnwatch.worker.model.ScanJob;
