@@ -55,6 +55,7 @@ public class RepositoryPersistence {
                 VALUES (?, ?, ?, ?::text[], ?, ?, ?, ?, ?::jsonb)
                 ON CONFLICT (scan_id) DO UPDATE SET
                   ecosystems       = EXCLUDED.ecosystems,
+                  total_deps       = EXCLUDED.total_deps,
                   vulnerable_count = EXCLUDED.vulnerable_count,
                   overall_severity = EXCLUDED.overall_severity,
                   completed_at     = EXCLUDED.completed_at,

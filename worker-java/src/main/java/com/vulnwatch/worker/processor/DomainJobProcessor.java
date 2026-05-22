@@ -9,7 +9,6 @@ import com.vulnwatch.worker.model.AiResult;
 import com.vulnwatch.worker.model.DomainFinding;
 import com.vulnwatch.worker.model.DomainIntel;
 import com.vulnwatch.worker.model.EngineResult;
-import com.vulnwatch.worker.model.RepositoryIntel;
 import com.vulnwatch.worker.model.ScanJob;
 import com.vulnwatch.worker.persistence.DomainPersistence;
 import com.vulnwatch.worker.publisher.DomainIntelPublisher;

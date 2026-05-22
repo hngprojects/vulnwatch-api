@@ -11,7 +11,7 @@ import com.vulnwatch.worker.service.GithubService;
 import redis.clients.jedis.JedisPooled;
 
 import com.vulnwatch.worker.ai.GroqAiEnricher;
-import com.vulnwatch.worker.ai.repository.GeminiEnricher;
+import com.vulnwatch.worker.ai.repository.AnthropicEnricher;
 import com.vulnwatch.worker.engine.ParallelScanner;
 import com.vulnwatch.worker.engine.repository.ScanEngine;
 import com.vulnwatch.worker.persistence.DomainPersistence;
@@ -43,7 +43,7 @@ public class ProcessorConfig {
     public JobProcessor repositoryOrchestrator(
             GithubService githubService,
             Map<String, ScanEngine> scanners,
-            GeminiEnricher aiEnrichmentService,
+            AnthropicEnricher aiEnrichmentService,
             RepositoryPersistence repo,
             RepositoryIntelPublisher redisPublisher,
             JedisPooled jedisPooled,

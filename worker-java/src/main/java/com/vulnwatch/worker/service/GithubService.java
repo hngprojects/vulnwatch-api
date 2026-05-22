@@ -19,8 +19,9 @@ import java.util.List;
  * Talks to the GitHub REST API.
  *
  * Required env vars:
- *   GITHUB_TOKEN   — personal access token or GitHub App installation token
- *   GITHUB_API_URL — defaults to https://api.github.com (override for GitHub Enterprise)
+ * GITHUB_TOKEN — personal access token or GitHub App installation token
+ * GITHUB_API_URL — defaults to https://api.github.com (override for GitHub
+ * Enterprise)
  */
 @Service
 public class GithubService {
@@ -35,6 +36,11 @@ public class GithubService {
     public GithubService(
             @Value("${github.token}") String token,
             @Value("${github.api-url:https://api.github.com}") String apiUrl) {
+
+        if (token == null || token.isBlank()) {
+            throw new IllegalStateException("Missing github.token configuration");
+        }
+        
         this.token = token;
         this.apiUrl = apiUrl;
         this.http = HttpClient.newHttpClient();
@@ -44,7 +50,7 @@ public class GithubService {
     /**
      * Returns all file paths in the repo using the Git Trees API (recursive).
      *
-     * @param repoId  format: "owner/repo"  e.g. "tonykoder/my-app"
+     * @param repoId format: "owner/repo" e.g. "tonykoder/my-app"
      */
     public List<String> getFilePaths(String repoId) {
         try {
@@ -52,7 +58,8 @@ public class GithubService {
             String repoUrl = apiUrl + "/repos/" + repoId;
             JsonNode repoInfo = get(repoUrl);
             String defaultBranch = repoInfo.get("default_branch").asText();
-            String sha = repoInfo.get("branches_url").asText(); // placeholder — get actual SHA below
+            // String sha = repoInfo.get("branches_url").asText(); // placeholder — get
+            // actual SHA below
 
             // Get branch SHA
             String branchUrl = apiUrl + "/repos/" + repoId + "/branches/" + defaultBranch;

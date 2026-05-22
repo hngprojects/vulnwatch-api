@@ -54,7 +54,7 @@ public class RepositoryIntelPublisher {
                 "vulnerableCount", result.vulnerableCount(),
                 "overallSeverity", result.overallSeverity(),
                 "completedAt",     Instant.now().toString(),
-                "error",           ""
+                "error",           null
         ));
     }
 
@@ -78,6 +78,7 @@ public class RepositoryIntelPublisher {
             log.debug("Published event to {}: scanId={}", notifyQueue, event.get("scanId"));
         } catch (Exception e) {
             log.error("Failed to publish notification event: {}", e.getMessage(), e);
+            throw new RuntimeException("Notification publish failed", e);  
         }
     }
 }

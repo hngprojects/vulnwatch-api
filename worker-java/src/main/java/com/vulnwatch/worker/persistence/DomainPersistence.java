@@ -4,6 +4,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -70,8 +71,7 @@ public class DomainPersistence {
             List<AiResult> enrichments,
             int securityScore) {
 
-        List<DomainFinding> findings =
-                assembleFindings(scanId, engineResults, enrichments);
+        List<DomainFinding> findings = assembleFindings(scanId, engineResults, enrichments);
 
         try {
 
@@ -102,24 +102,22 @@ public class DomainPersistence {
         for (int i = 0; i < engineResults.size(); i++) {
 
             EngineResult engine = engineResults.get(i);
-            AiResult enrichment =
-                    i < enrichments.size() ? enrichments.get(i) : null;
+            AiResult enrichment = i < enrichments.size() ? enrichments.get(i) : null;
 
-            String severity =
-                    enrichment != null ? enrichment.severity() : "Low";
+            String severity = enrichment != null ? enrichment.severity() : "Low";
 
-            String explanation =
-                    enrichment != null
-                            ? enrichment.explanation()
-                            : "Engine ran but enrichment failed.";
+            String explanation = enrichment != null
+                    ? enrichment.explanation()
+                    : "Engine ran but enrichment failed.";
 
-            String cveId =
-                    enrichment != null ? enrichment.cveId() : null;
+            String cveId = enrichment != null ? enrichment.cveId() : null;
 
-            String remediation =
-                    enrichment != null
-                            ? String.join("\n", enrichment.remediationSteps())
-                            : "Review engine output manually.";
+            String remediation =  
+                    enrichment != null  
+                            && enrichment.remediationSteps() != null  
+                            && !enrichment.remediationSteps().isEmpty()  
+                            ? String.join("\n", enrichment.remediationSteps())  
+                            : "Review engine output manually.";  
 
             findings.add(new DomainFinding(
                     scanId,
@@ -182,7 +180,13 @@ public class DomainPersistence {
     private String formatPayload(EngineResult engine) {
 
         if (!engine.success()) {
-            return "{\"error\": \"" + engine.errorMessage() + "\"}";
+            try {  
+                return mapper.writeValueAsString(  
+                        Map.of("error", engine.errorMessage() == null ? "Unknown error" : engine.errorMessage()));  
+            } catch (Exception e) {  
+                log.warn("Failed to serialize error payload", e);  
+                return "{\"error\":\"Unknown error\"}";  
+            }  
         }
 
         try {
@@ -222,11 +226,15 @@ public class DomainPersistence {
 
         Timestamp now = Timestamp.from(Instant.now());
 
-        jdbc.update(
+        int updated = jdbc.update(
                 UPDATE_SCAN,
                 securityScore,
                 now,
                 now,
                 UUID.fromString(scanId));
+
+        if (updated == 0) {
+            throw new IllegalStateException("No scan row updated for scanId=" + scanId);
+        }
     }
 }

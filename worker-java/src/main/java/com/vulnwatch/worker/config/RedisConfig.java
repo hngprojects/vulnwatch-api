@@ -18,7 +18,6 @@ import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.JedisClientConfig;
 import redis.clients.jedis.Connection;
 
-// Add this bean method inside RedisConfig
 import java.time.Duration;
 
 @Configuration

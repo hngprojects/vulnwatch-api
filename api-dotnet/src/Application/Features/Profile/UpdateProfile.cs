@@ -50,7 +50,7 @@ public class UpdateProfileHandler(
             LastName:        user.LastName,
             ProfilePictureUrl: user.ProfilePictureUrl,
             EmailConfirmed:  user.EmailConfirmed,
-            HasGoogleLinked: user.GoogleId is not null,
+            HasGoogleLinked: !string.IsNullOrWhiteSpace(user.GoogleId),
             NotificationPreferences: prefsDto,
             CreatedAt:       user.CreatedAt,
             UpdatedAt:       user.UpdatedAt

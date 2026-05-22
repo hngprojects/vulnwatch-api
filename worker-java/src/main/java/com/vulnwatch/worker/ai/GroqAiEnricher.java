@@ -42,9 +42,6 @@ public class GroqAiEnricher {
                 throw new IllegalStateException("Missing GROQ_API_KEY");
             }
 
-            System.out.println("API KEY PRESENT = " + (apiKey != null));
-            System.out.println("API KEY LENGTH = " + (apiKey != null ? apiKey.length() : 0));
-
             String prompt = buildPrompt(job, engineResult);
 
             Map<String, Object> body = Map.of(

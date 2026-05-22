@@ -25,9 +25,9 @@ import java.util.List;
  *   AI_MAX_TOKENS      — defaults to 4096
  */
 @Service
-public class GeminiEnricher {
+public class AnthropicEnricher {
 
-    private static final Logger log = LoggerFactory.getLogger(GeminiEnricher.class);
+    private static final Logger log = LoggerFactory.getLogger(AnthropicEnricher.class);
     private static final String ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
     private final String apiKey;
@@ -36,14 +36,16 @@ public class GeminiEnricher {
     private final HttpClient http;
     private final ObjectMapper mapper;
 
-    public GeminiEnricher(
+    public AnthropicEnricher(
             @Value("${anthropic.api-key}") String apiKey,
             @Value("${ai.model:claude-sonnet-4-20250514}") String model,
             @Value("${ai.max-tokens:4096}") int maxTokens) {
         this.apiKey = apiKey;
         this.model = model;
         this.maxTokens = maxTokens;
-        this.http = HttpClient.newHttpClient();
+        this.http = HttpClient.newBuilder()  
+                .connectTimeout(java.time.Duration.ofSeconds(10))  
+                .build();
         this.mapper = new ObjectMapper();
     }
 
@@ -152,12 +154,21 @@ public class GeminiEnricher {
     }
 
     private DependencyFinding fallbackDependency(String raw, String reason) {
-        String[] parts = raw.split("@", 2);
-        return new DependencyFinding(
-                parts[0], parts.length > 1 ? parts[1] : "unknown",
-                raw, false, "NONE", List.of(),
-                reason, "Retry scan or check manually."
-        );
+                int lastAt = raw.lastIndexOf('@');  
+        String name;  
+        String version;  
+        if (lastAt > 0) {  
+            name = raw.substring(0, lastAt);  
+            version = raw.substring(lastAt + 1);  
+        } else {  
+            name = raw;  
+            version = "unknown";  
+        }  
+        return new DependencyFinding(  
+                name, version,  
+                raw, false, "NONE", List.of(),  
+                reason, "Retry scan or check manually."  
+        ); 
     }
 
     // ── Request record ────────────────────────────────────────────────────────

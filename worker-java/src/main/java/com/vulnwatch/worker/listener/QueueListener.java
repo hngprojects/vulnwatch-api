@@ -1,6 +1,7 @@
 package com.vulnwatch.worker.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vulnwatch.worker.ai.repository.AnthropicEnricher;
 import com.vulnwatch.worker.model.ScanJob;
 import com.vulnwatch.worker.processor.JobProcessor;
 import redis.clients.jedis.JedisPooled;
@@ -9,11 +10,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 public class QueueListener implements Runnable {
+    private static final Logger log = LoggerFactory.getLogger(QueueListener.class);
     private final String queueName;
     private final int blpopTimeout;
     private final Map<String, JobProcessor> processors;
@@ -40,7 +45,8 @@ public class QueueListener implements Runnable {
         while (running) {
             try {
                 List<String> result = jedis.blpop(blpopTimeout, queueName);
-                if (result == null) continue;
+                if (result == null)
+                    continue;
                 String payload = result.get(1);
                 executor.submit(() -> handle(payload));
             } catch (Exception e) {
@@ -55,22 +61,27 @@ public class QueueListener implements Runnable {
     }
 
     private void handle(String raw) {
-        System.out.println("Received job payload: " + raw);
+        ScanJob job;
         try {
-            ScanJob job = mapper.readValue(raw, ScanJob.class);
-            System.out.printf("Parsed job: scanId=%s domainId=%s scanType=%s%n",
+            job = mapper.readValue(raw, ScanJob.class);
+        } catch (Exception e) {
+            log.error("Failed to deserialize job payload: {}", raw, e);
+            return;
+        }
+
+        try {
+            log.info("Parsed job: scanId={} domainId={} scanType={}",
                     job.scanId(), job.domainId(), job.scanType());
 
             JobProcessor processor = processors.get(job.scanType());
             if (processor == null) {
-                System.err.printf("No processor for job type: '%s'. Registered types: %s%n",
+                log.warn("No processor for job type: '{}'. Registered types: {}",
                         job.scanType(), processors.keySet());
                 return;
             }
             processor.process(job);
         } catch (Exception e) {
-            System.err.println("Failed to process job: " + e.getMessage());
-            e.printStackTrace();
+            log.error("Failed to process scan; scanId={}, scanType={}", job.scanId(), job.scanType(), e);
         }
     }
 

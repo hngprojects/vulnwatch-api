@@ -9,7 +9,7 @@ import java.util.List;
  *   1. Implement this interface
  *   2. Annotate with @Component("<manifest-filename>")
  *      e.g. @Component("pom.xml"), @Component("requirements.txt")
- *   3. Spring auto-registers it into Map<String, DependencyScanner> in ProcessorConfig
+ *   3. Spring auto-registers it into Map<String, ScanEngine> in ProcessorConfig 
  *
  * No changes needed in RepositoryJobProcessor.
  */

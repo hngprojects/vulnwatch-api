@@ -1,6 +1,6 @@
 package com.vulnwatch.worker.processor;
 
-import com.vulnwatch.worker.ai.repository.GeminiEnricher;
+import com.vulnwatch.worker.ai.repository.AnthropicEnricher;
 import com.vulnwatch.worker.engine.repository.ScanEngine;
 import com.vulnwatch.worker.persistence.RepositoryPersistence;
 import com.vulnwatch.worker.service.GithubService;
@@ -10,7 +10,6 @@ import com.vulnwatch.worker.model.DependencyFinding;
 import com.vulnwatch.worker.publisher.RepositoryIntelPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jmx.export.notification.NotificationPublisher;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -36,14 +35,14 @@ public class RepositoryJobProcessor implements JobProcessor {
 
     private final GithubService gitHubService;
     private final Map<String, ScanEngine> scanners;   // keyed by manifest filename
-    private final GeminiEnricher aiEnrichmentService;
+    private final AnthropicEnricher aiEnrichmentService;
     private final RepositoryPersistence repo;
     private final RepositoryIntelPublisher redisPublisher;
 
     public RepositoryJobProcessor(
             GithubService gitHubService,
             Map<String, ScanEngine> scanners,
-            GeminiEnricher aiEnrichmentService,
+            AnthropicEnricher aiEnrichmentService,
             RepositoryPersistence repo,
             RepositoryIntelPublisher redisPublisher) {
         this.gitHubService = gitHubService;
@@ -143,6 +142,16 @@ public class RepositoryJobProcessor implements JobProcessor {
      * Returns a map of scanner → manifest path, preserving root-first order.
      *
      * e.g. a monorepo with both package.json and pom.xml returns both.
+     * 
+     * The current resolveAllScanners method assumes filePaths  
+     * are root-first but they may be arbitrary; update resolveAllScanners to ensure  
+     * shallowest (root-most) manifest wins by either sorting filePaths by path depth  
+     * ascending before the for-loop or by computing depth per path and, when  
+     * encountering an existing manifest filename in matchedByFilename, compare depths  
+     * and replace the stored entry if the new path is shallower; reference the  
+     * resolveAllScanners method and the matchedByFilename/result maps and ensure you  
+     * update result.put(scanner, path) and matchedByFilename accordingly when  
+     * replacing a deeper match. 
      */
     private Map<ScanEngine, String> resolveAllScanners(List<String> filePaths) {
         // Track which scanner types we've already matched to avoid duplicate ecosystems
