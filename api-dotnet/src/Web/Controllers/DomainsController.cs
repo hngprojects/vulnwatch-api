@@ -59,4 +59,12 @@ public class DomainsController : ControllerBase
         return result.ToHttpResponse(this);
     }
 
+    [HttpDelete("{domainId:guid}")]
+    [Authorize]
+    public async Task<ActionResult<Result<MessageResponse>>> DeleteDomain(Guid domainId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new DeleteDomainCommand(domainId), ct);
+        return result.ToHttpResponse(this);
+    }
+
 }
