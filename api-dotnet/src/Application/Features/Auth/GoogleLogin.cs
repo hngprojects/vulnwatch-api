@@ -68,6 +68,17 @@ public class GoogleLoginHandler : IRequestHandler<GoogleLoginCommand, Result<Aut
                 if (!createResult.Succeeded)
                     return Result<AuthResponse>.Failure(Error.Validation(createResult.Errors.First().Description));
 
+                if (!string.IsNullOrWhiteSpace(googleUser.Picture))
+                {
+                    user.UpdateProfile(user.FirstName, user.LastName, profilePictureUrl: googleUser.Picture);
+                    
+                    var pictureUpdateResult = await _userManager.UpdateAsync(user);  
+                    
+                    if (!pictureUpdateResult.Succeeded)  
+                        return Result<AuthResponse>.Failure(  
+                            Error.Validation(pictureUpdateResult.Errors.First().Description)); 
+                }
+
                 await TryCreateDefaultPrefsAsync(user.Id, ct);
             }
             else

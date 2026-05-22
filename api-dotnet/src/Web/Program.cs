@@ -59,6 +59,10 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    options.IncludeXmlComments(xmlPath);
+
     options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -213,7 +217,8 @@ builder.Services.AddSingleton<LookupClient>(_ =>
             );
 builder.Services.AddScoped<IDnsResolver, DnsResolver>();
 builder.Services.AddSignalR();
-builder.Services.AddHostedService<ScanResultConsumer>();
+// builder.Services.AddHostedService<ScanResultConsumer>();
+builder.Services.AddHostedService<DomainIntelConsumer>();
 builder.Services.AddScoped<IAlertRepository, AlertRepository>();
 builder.Services.AddHostedService<AlertOutboxProcessor>();
 builder.Services.AddScoped<AlertDispatcher>();
@@ -231,26 +236,16 @@ if (corsSettings?.AllowedOrigins is null ||
     throw new InvalidOperationException("CORS AllowedOrigins is not configured.");
 }
 
-// builder.Services.AddCors(options =>
-// {
-
-//     options.AddPolicy("DefaultCors", policy =>
-//     {
-//         policy
-//             .WithOrigins(corsSettings.AllowedOrigins)
-//             .AllowAnyHeader()
-//             .AllowAnyMethod()
-//             .AllowCredentials();
-//     });
-// });
 builder.Services.AddCors(options =>
 {
+
     options.AddPolicy("DefaultCors", policy =>
     {
         policy
-            .AllowAnyOrigin()
+            .WithOrigins(corsSettings.AllowedOrigins)
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            .AllowCredentials();
     });
 });
 
@@ -267,9 +262,6 @@ builder.Services.AddHealthChecks()
         tags: ["cache", "ready"]);
 
 var app = builder.Build();
-
-app.Logger.LogInformation("CORS AllowedOrigins: {Origins}", 
-    string.Join(", ", corsSettings.AllowedOrigins));
 
 using (var scope = app.Services.CreateScope())
 {

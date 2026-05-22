@@ -1,24 +1,39 @@
 package com.vulnwatch.worker.processor;
 
-import com.vulnwatch.worker.ai.GroqAiEnricher;
-import com.vulnwatch.worker.engine.ParallelScanner;
-import com.vulnwatch.worker.model.*;
-import com.vulnwatch.worker.publisher.ScanResultPublisher;
-import com.vulnwatch.worker.repository.FindingPersistenceService;
-
 import java.util.ArrayList;
 import java.util.List;
 
-public class ScanJobProcessor implements JobProcessor {
+import com.vulnwatch.worker.ai.GroqAiEnricher;
+import com.vulnwatch.worker.engine.ParallelScanner;
+import com.vulnwatch.worker.model.AiResult;
+import com.vulnwatch.worker.model.DomainFinding;
+import com.vulnwatch.worker.model.DomainIntel;
+import com.vulnwatch.worker.model.EngineResult;
+import com.vulnwatch.worker.model.ScanJob;
+import com.vulnwatch.worker.persistence.DomainPersistence;
+import com.vulnwatch.worker.publisher.DomainIntelPublisher;
 
-    private final ParallelScanner           scanner     = new ParallelScanner();
-    private final GroqAiEnricher          enricher    = new GroqAiEnricher();
-    private final FindingPersistenceService persistence = new FindingPersistenceService();
-    private final ScanResultPublisher       publisher   = new ScanResultPublisher();
+public class DomainJobProcessor implements JobProcessor {
+    
+    private final ParallelScanner           scanner;
+    private final GroqAiEnricher            enricher;
+    private final DomainPersistence         persistence;
+    private final DomainIntelPublisher       publisher;
+
+    public DomainJobProcessor(
+            ParallelScanner scanner,
+            GroqAiEnricher enricher,
+            DomainPersistence persistence,
+            DomainIntelPublisher publisher) {
+        this.scanner     = scanner;
+        this.enricher    = enricher;
+        this.persistence = persistence;
+        this.publisher   = publisher;
+    }
 
     @Override
     public void process(ScanJob job) {
-        System.out.printf("[ScanJob] %s → starting for %s%n", job.scanId(), job.domainName());
+                System.out.printf("[ScanJob] %s → starting for %s%n", job.scanId(), job.domainName());
 
         // Step 1 — generate a friendly description (non-blocking, best-effort)
         String description = enricher.describe(job);
@@ -48,7 +63,7 @@ public class ScanJobProcessor implements JobProcessor {
         System.out.printf("[ScanJob] %s → security score: %d%n", job.scanId(), score);
 
         // Step 5 — persist findings to PostgreSQL (assembles Finding records internally)
-        List<Finding> findings = persistence.saveFindings(
+        List<DomainFinding> findings = persistence.saveFindings(
             job.scanId(), engineResults, enrichments, score);
 
         if (findings.isEmpty()) {
@@ -57,20 +72,14 @@ public class ScanJobProcessor implements JobProcessor {
         }
 
         // Step 6 — publish finished signal to Redis for .NET to consume
-        publisher.publish(new ScanResult(
-            job.scanId(),
-            job.domainId(),
-            job.domainName(),
-            job.requestedBy(),
-            score,
-            findings
-        ));
+        DomainIntel result = DomainIntel.of(job, score);
+        publisher.publishSuccess(job, result);
 
         System.out.printf("[ScanJob] %s → completed%n", job.scanId());
     }
 
     private int computeScore(List<AiResult> enrichments) {
-        int deductions = enrichments.stream()
+           int deductions = enrichments.stream()
             .filter(e -> e != null)
             .mapToInt(e -> switch (e.severity()) {
                 case "Critical" -> 30;
@@ -82,4 +91,8 @@ public class ScanJobProcessor implements JobProcessor {
             .sum();
         return Math.max(0, 100 - deductions);
     }
+
 }
+
+
+
