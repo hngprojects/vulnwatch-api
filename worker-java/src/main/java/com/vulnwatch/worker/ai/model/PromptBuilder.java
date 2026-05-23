@@ -69,7 +69,8 @@ public class PromptBuilder {
 
 
     private String formatSurfacePayload(EngineResult result) {
-        if (!result.success()) return "Engine failed: %s".formatted(result.errorMessage());
+        if (!result.success())
+            return "Engine failed: %s".formatted(result.errorMessage());
 
         return switch (result.payload()) {
             case DnsPayload dns -> """
