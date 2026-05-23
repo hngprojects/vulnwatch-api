@@ -1,8 +1,6 @@
 package com.vulnwatch.worker.processor;
 
-import com.vulnwatch.worker.ai.GroqAiEnricher;
 import com.vulnwatch.worker.ai.domain.SpringAiDomainEnricher;
-import com.vulnwatch.worker.ai.interfaces.AiEnricher;
 import com.vulnwatch.worker.engine.ParallelScanner;
 import com.vulnwatch.worker.model.AiResult;
 import com.vulnwatch.worker.model.DomainFinding;

@@ -1,6 +1,5 @@
 package com.vulnwatch.worker.processor;
 
-import com.vulnwatch.worker.ai.repository.AnthropicEnricher;
 import com.vulnwatch.worker.ai.repository.SpringAiRepositoryEnricher;
 import com.vulnwatch.worker.engine.repository.ScanEngine;
 import com.vulnwatch.worker.persistence.RepositoryPersistence;
