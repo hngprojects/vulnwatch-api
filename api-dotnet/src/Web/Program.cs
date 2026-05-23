@@ -261,6 +261,8 @@ builder.Services.AddHealthChecks()
         name: "redis",
         tags: ["cache", "ready"]);
 
+builder.Services.Configure<RouteOptions>(options => options.LowercaseUrls = true);
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
