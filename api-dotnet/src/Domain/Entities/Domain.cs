@@ -28,4 +28,13 @@ public class ScannedDomain : EntityBase
         VerificationToken = null;
         Touch();
     }
+
+    public void RegenerateToken(string newTokenHash)
+    {
+        if (VerificationStatus == VerificationStatus.Verified)
+            throw new InvalidOperationException("Cannot regenerate token for a verified domain.");
+
+        VerificationToken = newTokenHash;
+        Touch();
+    }
 }

@@ -29,7 +29,18 @@ public class DomainsController : ControllerBase
     }
 
     [Authorize]
-    [HttpPut("{id:guid}/verify")]
+    [HttpPost("ResendToken")]
+    public async Task<ActionResult<Result<RegisterDomainResponse>>> ResendToken(
+        RegisterDomainRequest request,
+        CancellationToken ct)
+    {
+        var result = await _mediator.Send(new ResendDomainTokenCommand(request.Domain), ct);
+        return result.ToHttpResponse(this);
+    }
+
+
+    [Authorize]
+    [HttpPut("{id:guid}/Verify")]
     public async Task<ActionResult<Result<VerifyDomainResponse>>> Verify(
         Guid id,
         CancellationToken ct)
