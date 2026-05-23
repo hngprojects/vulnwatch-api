@@ -14,37 +14,23 @@ jobs:
     timeout-minutes: 20
     environment:
       name: ${{ github.event.pull_request.base.ref == 'main' && 'production' || 'staging' }}
+    env:
+      HOST: ${{ secrets.HOST }}
+      USERNAME: ${{ secrets.USERNAME }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up .NET 8
-        uses: actions/setup-dotnet@v4
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
         with:
-          dotnet-version: '8.0.x'
-
-      - name: Build .NET API
-        run: dotnet publish api-dotnet/src/Web/Web.csproj -c Release -o ./dotnet-publish
-
-      - name: Archive .NET build
-        run: tar -czf dotnet-build.tar.gz dotnet-publish
-
-      - name: Copy .NET build to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: dotnet-build.tar.gz
-          target: "/tmp"
-
-      - name: Copy Java source to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "worker-java"
-          target: "/tmp"
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
 
       - name: Deploy on server
         uses: appleboy/ssh-action@v1.0.3
@@ -54,194 +40,182 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             if [ "${{ github.event.pull_request.base.ref }}" = "main" ]; then
-              DOTNET_DIR="/var/www/backend-production/publish"
-              JAVA_DIR="/var/www/backend-production/worker-java"
+              DEPLOY_DIR="/var/www/backend-production"
               API_NAME="api-production"
               WORKER_NAME="worker-production"
-              API_START_SCRIPT="/var/www/backend-production/start.sh"
+              BRANCH="main"
               API_PORT=5001
-              ENV_FILE="/etc/vulnwatch/production/api.env"
-              WORKER_ENV_FILE="/etc/vulnwatch/production/worker.properties"
-              START_SH_SOURCE="/etc/vulnwatch/production/start.sh"
+              START_SH="/etc/vulnwatch/production/start.sh"
+              API_ENV="/etc/vulnwatch/production/api.env"
+              WORKER_ENV="/etc/vulnwatch/production/worker.properties"
             else
-              DOTNET_DIR="/var/www/backend-staging/publish"
-              JAVA_DIR="/var/www/backend-staging/worker-java"
+              DEPLOY_DIR="/var/www/backend-staging"
               API_NAME="api-staging"
               WORKER_NAME="worker-staging"
-              API_START_SCRIPT="/var/www/backend-staging/start.sh"
+              BRANCH="staging"
               API_PORT=5000
-              ENV_FILE="/etc/vulnwatch/staging/api.env"
-              WORKER_ENV_FILE="/etc/vulnwatch/staging/worker.properties"
-              START_SH_SOURCE="/etc/vulnwatch/staging/start.sh"
+              START_SH="/etc/vulnwatch/staging/start.sh"
+              API_ENV="/etc/vulnwatch/staging/api.env"
+              WORKER_ENV="/etc/vulnwatch/staging/worker.properties"
             fi
 
-            DOTNET_BACKUP="${DOTNET_DIR}-backup"
-            JAVA_BACKUP="${JAVA_DIR}-backup"
+            PUBLISH_DIR="$DEPLOY_DIR/publish"
+            JAR_DIR="$DEPLOY_DIR/worker-java/target"
+            PUBLISH_BACKUP="${PUBLISH_DIR}-backup"
+            JAR_BACKUP="${JAR_DIR}-backup"
 
-            # ── Backup current .NET version ───────────────────────────────
-            if [ -d "$DOTNET_DIR" ] && [ "$(ls -A $DOTNET_DIR)" ]; then
-              echo "Backing up current .NET API..."
-              rm -rf "$DOTNET_BACKUP"
-              cp -r "$DOTNET_DIR" "$DOTNET_BACKUP"
+            # ── Backup current .NET publish output ────────────────────────
+            if [ -d "$PUBLISH_DIR" ] && [ "$(ls -A $PUBLISH_DIR)" ]; then
+              echo "Backing up current .NET publish..."
+              rm -rf "$PUBLISH_BACKUP"
+              cp -r "$PUBLISH_DIR" "$PUBLISH_BACKUP"
             else
-              echo "No existing .NET deployment found. Fresh deploy, no backup created."
+              echo "No existing .NET publish found. Fresh deploy, no backup created."
             fi
 
-            # ── Backup current Java worker ────────────────────────────────
-            if [ -d "$JAVA_DIR" ] && [ "$(ls -A $JAVA_DIR)" ]; then
-              echo "Backing up current Java worker..."
-              rm -rf "$JAVA_BACKUP"
-              cp -r "$JAVA_DIR" "$JAVA_BACKUP"
+            # ── Backup current Java JAR ───────────────────────────────────
+            if [ -d "$JAR_DIR" ] && [ "$(ls -A $JAR_DIR)" ]; then
+              echo "Backing up current Java JAR..."
+              rm -rf "$JAR_BACKUP"
+              cp -r "$JAR_DIR" "$JAR_BACKUP"
             else
-              echo "No existing Java deployment found. Fresh deploy, no backup created."
+              echo "No existing Java JAR found. Fresh deploy, no backup created."
             fi
 
-            # ── Stop existing PM2 processes + flush logs ──────────────────
+            # ── Pull latest code ──────────────────────────────────────────
+            echo "Pulling latest code from $BRANCH..."
+            cd "$DEPLOY_DIR"
+            git reset --hard HEAD
+            git pull origin "$BRANCH"
+
+            # ── Symlink env files and start script ────────────────────────
+            echo "Linking start.sh..."
+            ln -sf "$START_SH" "$DEPLOY_DIR/start.sh"
+
+            echo "Linking api .env..."
+            ln -sf "$API_ENV" "$DEPLOY_DIR/.env"
+
+            echo "Linking worker application.properties..."
+            ln -sfn "$WORKER_ENV" "$DEPLOY_DIR/worker-java/src/main/resources/application.properties"
+
+            # ── Build .NET API ────────────────────────────────────────────
+            echo "Building .NET API..."
+            if ! dotnet publish "$DEPLOY_DIR/api-dotnet/src/Web" -c Release -o "$PUBLISH_DIR"; then
+              echo ".NET build failed. Rolling back..."
+
+              if [ -d "$PUBLISH_BACKUP" ] && [ "$(ls -A $PUBLISH_BACKUP)" ]; then
+                rm -rf "$PUBLISH_DIR"
+                cp -r "$PUBLISH_BACKUP" "$PUBLISH_DIR"
+              fi
+
+              if [ -d "$JAR_BACKUP" ] && [ "$(ls -A $JAR_BACKUP)" ]; then
+                rm -rf "$JAR_DIR"
+                cp -r "$JAR_BACKUP" "$JAR_DIR"
+              fi
+
+              # Restart with old versions
+              pm2 delete $API_NAME || true
+              pm2 delete $WORKER_NAME || true
+              pm2 start "$DEPLOY_DIR/start.sh" -f --name "$API_NAME" --cwd "$DEPLOY_DIR"
+              pm2 start "java --enable-preview -jar $JAR_DIR/*.jar" --name "$WORKER_NAME"
+              pm2 save
+              rm -rf "$PUBLISH_BACKUP" "$JAR_BACKUP"
+              echo "Rollback successful."
+              exit 1
+            fi
+
+            # ── Build Java worker ─────────────────────────────────────────
+            echo "Building Java worker..."
+            if ! (cd "$DEPLOY_DIR/worker-java" && ./mvnw clean package -DskipTests); then
+              echo "Java build failed. Rolling back..."
+
+              if [ -d "$PUBLISH_BACKUP" ] && [ "$(ls -A $PUBLISH_BACKUP)" ]; then
+                rm -rf "$PUBLISH_DIR"
+                cp -r "$PUBLISH_BACKUP" "$PUBLISH_DIR"
+              fi
+
+              if [ -d "$JAR_BACKUP" ] && [ "$(ls -A $JAR_BACKUP)" ]; then
+                rm -rf "$JAR_DIR"
+                cp -r "$JAR_BACKUP" "$JAR_DIR"
+              fi
+
+              pm2 delete $API_NAME || true
+              pm2 delete $WORKER_NAME || true
+              pm2 start "$DEPLOY_DIR/start.sh" -f --name "$API_NAME" --cwd "$DEPLOY_DIR"
+              pm2 start "java --enable-preview -jar $JAR_DIR/*.jar" --name "$WORKER_NAME"
+              pm2 save
+              rm -rf "$PUBLISH_BACKUP" "$JAR_BACKUP"
+              echo "Rollback successful."
+              exit 1
+            fi
+
+            # ── Stop existing PM2 processes ───────────────────────────────
+            echo "Stopping existing PM2 processes..."
             pm2 delete $API_NAME || true
             pm2 delete $WORKER_NAME || true
             pm2 flush $API_NAME || true
             pm2 flush $WORKER_NAME || true
 
-            # ── Deploy .NET API ───────────────────────────────────────────
-            rm -rf "$DOTNET_DIR"
-            mkdir -p "$DOTNET_DIR"
+            # ── Start .NET API ────────────────────────────────────────────
+            echo "Starting $API_NAME..."
+            pm2 start "$DEPLOY_DIR/start.sh" -f --name "$API_NAME" --cwd "$DEPLOY_DIR"
 
-            tar -xzf /tmp/dotnet-build.tar.gz -C /tmp
-            cp -r /tmp/dotnet-publish/* "$DOTNET_DIR/"
-            rm -rf /tmp/dotnet-build.tar.gz /tmp/dotnet-publish
+            # ── Start Java worker ─────────────────────────────────────────
+            echo "Starting $WORKER_NAME..."
+            pm2 start "java --enable-preview -jar $DEPLOY_DIR/worker-java/target/*.jar" --name "$WORKER_NAME"
 
-            # Re-link persistent start.sh from /etc/vulnwatch
-            if [ -f "$START_SH_SOURCE" ]; then
-              echo "Linking start.sh from $START_SH_SOURCE..."
-              ln -sf "$START_SH_SOURCE" "$API_START_SCRIPT"
-            else
-              echo "ERROR: $START_SH_SOURCE not found. Cannot start .NET API."
-              exit 1
-            fi
-
-            # Re-link persistent .env so the API picks up real credentials
-            if [ -f "$ENV_FILE" ]; then
-              echo "Linking .env from $ENV_FILE..."
-              ln -sf "$ENV_FILE" "$(dirname $API_START_SCRIPT)/.env"
-            else
-              echo "WARNING: $ENV_FILE not found. API may fail to start."
-            fi
-
-            # ── Build Java worker on server with real properties ──────────
-            rm -rf "$JAVA_DIR"
-            mkdir -p "$JAVA_DIR"
-
-            cp -r /tmp/worker-java/* "$JAVA_DIR/"
-            rm -rf /tmp/worker-java
-
-            # Re-link persistent application.properties before building
-            if [ -f "$WORKER_ENV_FILE" ]; then
-              echo "Linking application.properties from $WORKER_ENV_FILE..."
-              rm -f "$JAVA_DIR/src/main/resources/application.properties"
-              ln -sf "$WORKER_ENV_FILE" "$JAVA_DIR/src/main/resources/application.properties"
-            else
-              echo "WARNING: $WORKER_ENV_FILE not found. Worker may fail to start."
-            fi
-
-            # Build the JAR on the server so real properties are baked in
-            echo "Building Java worker on server..."
-            cd "$JAVA_DIR"
-            ./mvnw package -q -DskipTests
-            cd -
-
-            # Verify JAR was built
-            JAR_FILE=$(ls $JAVA_DIR/target/*.jar 2>/dev/null | grep -v sources | head -1)
-            if [ -z "$JAR_FILE" ]; then
-              echo "ERROR: No JAR file found in $JAVA_DIR/target"
-              exit 1
-            fi
-            echo "JAR built successfully: $JAR_FILE"
-
-            if [ ! -f "$WORKER_START_SCRIPT" ]; then
-              echo "ERROR: worker start.sh not found at $WORKER_START_SCRIPT"
-              exit 1
-            fi
-
-            # ── Start services with PM2 ───────────────────────────────────
-            pm2 start "$API_START_SCRIPT" --name "$API_NAME" --cwd "$(dirname $API_START_SCRIPT)"
-            pm2 save
-
-            pm2 start "$WORKER_START_SCRIPT" --name "$WORKER_NAME" --cwd "$JAVA_DIR"
-            pm2 save
-
-            # ── Health check for .NET API ─────────────────────────────────
-            echo "Running health check for .NET API..."
-            API_HEALTHY=false
+            # ── Health check ──────────────────────────────────────────────
+            echo "Running health check..."
+            HEALTHY=false
             for i in 1 2 3 4 5; do
               sleep 3
               STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$API_PORT/health)
               if [ "$STATUS" = "200" ]; then
-                API_HEALTHY=true
-                echo ".NET API health check passed on attempt $i (HTTP $STATUS)"
+                HEALTHY=true
+                echo "Health check passed on attempt $i (HTTP $STATUS)"
                 break
               else
                 echo "Attempt $i: HTTP $STATUS, retrying..."
               fi
             done
 
-            if [ "$API_HEALTHY" = "false" ]; then
+            if [ "$HEALTHY" = "false" ]; then
               echo "Health check failed. Rolling back..."
 
               pm2 delete $API_NAME || true
               pm2 delete $WORKER_NAME || true
 
-              # Rollback .NET API
-              if [ -d "$DOTNET_BACKUP" ] && [ "$(ls -A $DOTNET_BACKUP)" ]; then
+              if [ -d "$PUBLISH_BACKUP" ] && [ "$(ls -A $PUBLISH_BACKUP)" ]; then
                 echo "Rolling back .NET API..."
-                rm -rf "$DOTNET_DIR"
-                cp -r "$DOTNET_BACKUP" "$DOTNET_DIR"
-
-                # Re-link start.sh and .env after rollback
-                ln -sf "$START_SH_SOURCE" "$API_START_SCRIPT"
-                if [ -f "$ENV_FILE" ]; then
-                  ln -sf "$ENV_FILE" "$(dirname $API_START_SCRIPT)/.env"
-                fi
-
-                pm2 start "$API_START_SCRIPT" --name "$API_NAME" --cwd "$(dirname $API_START_SCRIPT)"
-                pm2 save
-                rm -rf "$DOTNET_BACKUP"
-                echo ".NET API rollback successful."
-              else
-                echo "No .NET backup available. API is down."
+                rm -rf "$PUBLISH_DIR"
+                cp -r "$PUBLISH_BACKUP" "$PUBLISH_DIR"
               fi
 
-              # Rollback Java worker
-              if [ -d "$JAVA_BACKUP" ] && [ "$(ls -A $JAVA_BACKUP)" ]; then
+              if [ -d "$JAR_BACKUP" ] && [ "$(ls -A $JAR_BACKUP)" ]; then
                 echo "Rolling back Java worker..."
-                rm -rf "$JAVA_DIR"
-                cp -r "$JAVA_BACKUP" "$JAVA_DIR"
-
-                # Re-link worker env after rollback
-                if [ -f "$WORKER_ENV_FILE" ]; then
-                  rm -f "$JAVA_DIR/src/main/resources/application.properties"
-                  ln -sf "$WORKER_ENV_FILE" "$JAVA_DIR/src/main/resources/application.properties"
-                fi
-
-                pm2 start "$WORKER_START_SCRIPT" --name "$WORKER_NAME" --cwd "$JAVA_DIR"
-                pm2 save
-                rm -rf "$JAVA_BACKUP"
-                echo "Java worker rollback successful."
-              else
-                echo "No Java backup available. Worker is down."
+                rm -rf "$JAR_DIR"
+                cp -r "$JAR_BACKUP" "$JAR_DIR"
               fi
 
+              pm2 start "$DEPLOY_DIR/start.sh" -f --name "$API_NAME" --cwd "$DEPLOY_DIR"
+              pm2 start "java --enable-preview -jar $JAR_DIR/*.jar" --name "$WORKER_NAME"
+              pm2 save
+              rm -rf "$PUBLISH_BACKUP" "$JAR_BACKUP"
+              echo "Rollback successful. Services are running on previous version."
               exit 1
             fi
 
             # ── Cleanup backups after successful deploy ───────────────────
-            if [ -d "$DOTNET_BACKUP" ]; then
+            if [ -d "$PUBLISH_BACKUP" ]; then
               echo "Cleaning up .NET backup..."
-              rm -rf "$DOTNET_BACKUP"
+              rm -rf "$PUBLISH_BACKUP"
             fi
 
-            if [ -d "$JAVA_BACKUP" ]; then
+            if [ -d "$JAR_BACKUP" ]; then
               echo "Cleaning up Java backup..."
-              rm -rf "$JAVA_BACKUP"
+              rm -rf "$JAR_BACKUP"
             fi
 
+            echo "Deploy successful!"
+            pm2 save
             pm2 list
