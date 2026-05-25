@@ -73,6 +73,9 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
             e.HasIndex(d => new { d.UserId, d.DomainName }).IsUnique();
             e.HasIndex(d => new { d.DomainName, d.VerificationStatus });
             e.HasIndex(d => new { d.UserId, d.VerificationStatus });
+            e.HasIndex(d => new { d.VerificationStatus, d.SslCertExpiry })
+                .HasFilter("\"VerificationStatus\" = 'Verified' AND \"SslCertExpiry\" IS NOT NULL")
+                .HasDatabaseName("IX_ScannedDomains_Verified_SslCertExpiry");
         });
 
         builder.Entity<Scan>(e =>

@@ -48,6 +48,7 @@ public class DomainJobProcessor implements JobProcessor {
 
         List<DomainFinding> findings = persistence.saveFindings(
                                                             job.scanId(),
+                                                            job.domainId(),
                                                             engineResults,
                                                             enrichments,
                                                             score);
