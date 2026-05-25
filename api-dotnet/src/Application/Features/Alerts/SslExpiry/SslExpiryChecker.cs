@@ -7,7 +7,7 @@ namespace Application.Features.Alerts.SslExpiry;
 
 public sealed class SslExpiryChecker
 {
-    private static readonly int[] ThresholdDays = [65, 30, 14, 7];
+    private static readonly int[] ThresholdDays = [30, 14, 7];
 
     private readonly IDomainRepository _domainRepository;
     private readonly ILogger<SslExpiryChecker> _logger;
