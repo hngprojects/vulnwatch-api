@@ -35,7 +35,7 @@ public class AlertDispatcher
             //     await HandleScanCompleted(e, ct);
             //     break;
             default:
-                _logger.LogWarning("No handler registered for event type {EventType}", 
+                _logger.LogWarning("No handler registered for event type {EventType}",
                     domainEvent.GetType().Name);
                 break;
         }
@@ -58,18 +58,19 @@ public class AlertDispatcher
         {
             var alert = SslExpiryAlertFactory.Create(e, channel);
             await _alerts.AddAsync(alert, ct);
-        }
 
-        try
-        {
-            await _alerts.SaveChangesAsync(ct);
-            // _logger.LogInformation("SSL expiry alerts saved for domain {DomainName}", e.DomainName);
-        }
-        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
-        {
-            // _logger.LogWarning(
-            //     "Duplicate SSL expiry alert suppressed for domain {DomainName}", e.DomainName);
-            _alerts.DetachUnsavedAlerts();
+
+            try
+            {
+                await _alerts.SaveChangesAsync(ct);
+                // _logger.LogInformation("SSL expiry alerts saved for domain {DomainName}", e.DomainName);
+            }
+            catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+            {
+                // _logger.LogWarning(
+                //     "Duplicate SSL expiry alert suppressed for domain {DomainName}", e.DomainName);
+                _alerts.DetachUnsavedAlerts();
+            }
         }
     }
 

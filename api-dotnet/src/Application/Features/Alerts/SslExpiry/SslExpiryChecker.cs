@@ -21,6 +21,7 @@ public sealed class SslExpiryChecker
     public async Task<IReadOnlyList<SslExpiryEvent>> GetPendingAlerts(CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
+        var todayUtc = now.UtcDateTime.Date;
         var maxLookahead = now.AddDays(ThresholdDays.Max() + 1);
 
         // _logger.LogInformation("Querying domains with SSL expiry between {Now} and {MaxLookahead}", now, maxLookahead);
@@ -47,7 +48,7 @@ public sealed class SslExpiryChecker
             .Select(d => new
             {
                 Domain = d,
-                DaysRemaining = (d.SslCertExpiry!.Value - now).Days
+                DaysRemaining = (d.SslCertExpiry!.Value.UtcDateTime.Date - todayUtc).Days
             })
             .Where(x => ThresholdDays.Contains(x.DaysRemaining))
             .Select(x => new SslExpiryEvent(

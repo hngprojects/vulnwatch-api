@@ -11,6 +11,9 @@ public static class AlertEmailTemplates
           <title>{title}</title>
         </head>
         <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+        <div style="display:none;max-height:0px;overflow:hidden;opacity:0;color:transparent;;">>
+          {previewText}
+        </div>
           <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px;">
             <tr>
               <td align="center">

@@ -41,6 +41,9 @@ public class ScannedDomain : EntityBase
 
     public void SetSslCertExpiry(DateTimeOffset? expiry)
     {
+        if (SslCertExpiry == expiry)
+            return;
+
         SslCertExpiry = expiry;
         Touch();
     }
