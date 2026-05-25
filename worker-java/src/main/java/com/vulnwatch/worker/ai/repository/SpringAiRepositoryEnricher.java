@@ -104,7 +104,7 @@ public class SpringAiRepositoryEnricher {
                 version,
                 raw,
                 false,
-                FindingSeverity.LOW.getName(),
+                FindingSeverity.NONE.getName(),
                 List.of(),
                 reason,
                 "Retry scan or check manually."

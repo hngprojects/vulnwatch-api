@@ -1,22 +1,37 @@
 package com.vulnwatch.worker.config;
 
+import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.google.genai.GoogleGenAiChatModel; // Fixed import
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class AiConfig {
 
+    @Value("${worker.ai.provider:groq}")   // groq | anthropic | google (or gemini)
+    private String aiProvider;
+
     /**
-     * ChatClient backed by whichever model is enabled via:
-     *   spring.ai.openai.chat.enabled / spring.ai.anthropic.chat.enabled / spring.ai.google.genai.chat.enabled
-     *
-     * Only one ChatModel bean will exist at runtime.
-     * Switch models by changing worker.ai.provider and the corresponding .chat.enabled flags.
+     * Single ChatClient bean — model is chosen by worker.ai.provider property.
+     * No code change needed to swap models.
      */
     @Bean
-    public ChatClient chatClient(ChatModel chatModel) {
-        return ChatClient.builder(chatModel).build();
+    public ChatClient chatClient(
+            OpenAiChatModel openAiChatModel,           // used for groq (OpenAI-compatible endpoint)
+            AnthropicChatModel anthropicChatModel,
+            GoogleGenAiChatModel googleGenAiChatModel) { // Fixed class type
+
+        var model = switch (aiProvider.toLowerCase().trim()) {
+            case "anthropic", "claude" -> anthropicChatModel;
+            case "google", "gemini"  -> googleGenAiChatModel;
+            default  -> openAiChatModel;       // groq / openai is default
+        };
+
+        return ChatClient
+                .builder(model)
+                .build();
     }
 }
