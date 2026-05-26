@@ -8,6 +8,7 @@ public class ScannedDomain : EntityBase
     public string DomainName { get; private set; } = default!;
     public string? VerificationToken { get; private set; }
     public VerificationStatus VerificationStatus { get; private set; }
+    public DateTimeOffset? SslCertExpiry { get; private set; }
     public User User { get; private set; } = default!;
     public ICollection<Scan> Scans { get; private set; } = new List<Scan>();
 
@@ -35,6 +36,15 @@ public class ScannedDomain : EntityBase
             throw new InvalidOperationException("Cannot regenerate token for a verified domain.");
 
         VerificationToken = newTokenHash;
+        Touch();
+    }
+
+    public void SetSslCertExpiry(DateTimeOffset? expiry)
+    {
+        if (SslCertExpiry == expiry)
+            return;
+
+        SslCertExpiry = expiry;
         Touch();
     }
 }

@@ -1,6 +1,6 @@
 package com.vulnwatch.worker.processor;
 
-import com.vulnwatch.worker.ai.GroqAiEnricher;
+import com.vulnwatch.worker.ai.domain.SpringAiDomainEnricher;
 import com.vulnwatch.worker.engine.ParallelScanner;
 import com.vulnwatch.worker.model.AiResult;
 import com.vulnwatch.worker.model.DomainFinding;
@@ -31,7 +31,7 @@ import java.util.Objects;
 public class DomainJobProcessor implements JobProcessor {
 
     private final ParallelScanner scanner;
-    private final GroqAiEnricher enricher;
+    private final SpringAiDomainEnricher enricher;
     private final DomainPersistence persistence;
     private final DomainIntelPublisher publisher;
 
@@ -48,6 +48,7 @@ public class DomainJobProcessor implements JobProcessor {
 
         List<DomainFinding> findings = persistence.saveFindings(
                                                             job.scanId(),
+                                                            job.domainId(),
                                                             engineResults,
                                                             enrichments,
                                                             score);
