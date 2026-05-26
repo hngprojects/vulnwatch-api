@@ -1,6 +1,6 @@
 package com.vulnwatch.worker.processor;
 
-import com.vulnwatch.worker.ai.repository.AnthropicEnricher;
+import com.vulnwatch.worker.ai.repository.SpringAiRepositoryEnricher;
 import com.vulnwatch.worker.engine.repository.ScanEngine;
 import com.vulnwatch.worker.persistence.RepositoryPersistence;
 import com.vulnwatch.worker.service.GithubService;
@@ -34,7 +34,7 @@ public class RepositoryJobProcessor implements JobProcessor {
 
     private final GithubService gitHubService;
     private final Map<String, ScanEngine> scanners;   // keyed by manifest filename
-    private final AnthropicEnricher aiEnrichmentService;
+    private final SpringAiRepositoryEnricher aiEnrichmentService;
     private final RepositoryPersistence repo;
     private final RepositoryIntelPublisher redisPublisher;
 

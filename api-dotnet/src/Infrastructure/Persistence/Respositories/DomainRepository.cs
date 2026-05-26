@@ -9,6 +9,15 @@ namespace Infrastructure.Persistence.Repositories;
 public sealed class DomainRepository(VulnWatchDbContext db)
     : BaseRepository<ScannedDomain>(db), IDomainRepository
 {
+    public Task<List<ScannedDomain>> GetDomainsWithExpiringCertificates(DateTimeOffset maxLookahead, CancellationToken ct = default) =>
+        Db.Domains
+            .Where(d =>
+                d.VerificationStatus == VerificationStatus.Verified &&
+                d.SslCertExpiry != null &&
+                d.SslCertExpiry > DateTimeOffset.UtcNow &&
+                d.SslCertExpiry <= maxLookahead)
+            .ToListAsync(ct);
+    
     public Task<ScannedDomain?> GetById(Guid domainId, CancellationToken ct = default) =>
          Db.Domains
              .FirstOrDefaultAsync(d => d.Id == domainId, ct);

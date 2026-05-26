@@ -2,7 +2,7 @@ package com.vulnwatch.worker.engine;
 
 import com.vulnwatch.worker.engine.domain.DnsEngine;
 import com.vulnwatch.worker.engine.domain.HttpEngine;
-import com.vulnwatch.worker.engine.domain.ScanEngine;
+import com.vulnwatch.worker.engine.domain.Scanner;
 import com.vulnwatch.worker.engine.domain.SslEngine;
 import com.vulnwatch.worker.model.EngineResult;
 import com.vulnwatch.worker.model.ScanJob;
@@ -24,7 +24,7 @@ import java.util.concurrent.StructuredTaskScope;
 @Component
 public class ParallelScanner {
 
-    private final List<ScanEngine> engines = List.of(
+    private final List<Scanner> engines = List.of(
             new DnsEngine(),
             new SslEngine(),
             new HttpEngine()
@@ -47,14 +47,14 @@ public class ParallelScanner {
         }
     }
 
-    private EngineResult runEngine(ScanEngine engine, ScanJob job) {
+    private EngineResult runEngine(Scanner engine, ScanJob job) {
         log.debug("Engine starting [scanId={} engine={} domain={}]",
-                job.scanId(), engine.surface(), job.domainName());
+                job.scanId(), engine.surfaceType(), job.domainName());
 
-        EngineResult result = engine.run(job);
+        EngineResult result = engine.scan(job);
 
         log.debug("Engine finished [scanId={} engine={} success={}]",
-                job.scanId(), engine.surface(), result.success());
+                job.scanId(), engine.surfaceType(), result.success());
 
         return result;
     }

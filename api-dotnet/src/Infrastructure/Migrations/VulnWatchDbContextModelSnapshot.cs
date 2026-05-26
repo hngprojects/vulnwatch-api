@@ -403,6 +403,9 @@ namespace Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTimeOffset?>("SslCertExpiry")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -424,6 +427,10 @@ namespace Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("UserId", "VerificationStatus");
+
+                    b.HasIndex("VerificationStatus", "SslCertExpiry")
+                        .HasDatabaseName("IX_ScannedDomains_Verified_SslCertExpiry")
+                        .HasFilter("\"VerificationStatus\" = 'Verified' AND \"SslCertExpiry\" IS NOT NULL");
 
                     b.ToTable("Domains");
                 });

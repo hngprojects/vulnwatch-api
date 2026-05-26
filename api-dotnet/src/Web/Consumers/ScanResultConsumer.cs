@@ -1,6 +1,5 @@
 using System.Text.Json;
-using Application.Interfaces;
-using Application.Services;
+using Application.Features.Alerts;
 using Domain.Enums;
 using Domain.Events;
 using Microsoft.AspNetCore.SignalR;
