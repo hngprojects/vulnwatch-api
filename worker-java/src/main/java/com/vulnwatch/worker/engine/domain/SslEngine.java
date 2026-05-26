@@ -1,5 +1,6 @@
 package com.vulnwatch.worker.engine.domain;
 
+import com.vulnwatch.worker.enums.SurfaceType;
 import com.vulnwatch.worker.model.EngineResult;
 import com.vulnwatch.worker.model.ScanJob;
 import com.vulnwatch.worker.model.payload.SslPayload;
@@ -12,15 +13,17 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
-public class SslEngine implements ScanEngine {
+public class SslEngine implements Scanner {
 
     private static final int TIMEOUT_MS = 10_000;
 
     @Override
-    public String surface() { return "Ssl"; }
+    public SurfaceType surfaceType() {
+        return SurfaceType.SSL;
+    }
 
     @Override
-    public EngineResult run(ScanJob job) {
+    public EngineResult scan(ScanJob job) {
         String domain = job.domainName();
         List<String> issues = new ArrayList<>();
 

@@ -1,5 +1,6 @@
 package com.vulnwatch.worker.engine.domain;
 
+import com.vulnwatch.worker.enums.SurfaceType;
 import com.vulnwatch.worker.model.EngineResult;
 import com.vulnwatch.worker.model.ScanJob;
 import com.vulnwatch.worker.model.payload.HttpPayload;
@@ -11,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-public class HttpEngine implements ScanEngine {
+public class HttpEngine implements Scanner {
 
     private static final List<String> REQUIRED_HEADERS = List.of(
         "Strict-Transport-Security",
@@ -27,12 +28,13 @@ public class HttpEngine implements ScanEngine {
         .readTimeout(10, TimeUnit.SECONDS)
         .followRedirects(true)
         .build();
+    @Override
+    public SurfaceType surfaceType() {
+        return SurfaceType.HTTP_HEADERS;
+    }
 
     @Override
-    public String surface() { return "HttpHeaders"; }
-
-    @Override
-    public EngineResult run(ScanJob job) {
+    public EngineResult scan(ScanJob job) {
         String domain = job.domainName();
         List<String> present = new ArrayList<>();
         List<String> missing = new ArrayList<>();
