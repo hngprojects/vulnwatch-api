@@ -150,6 +150,7 @@ public class StartScanHandlerTests : IDisposable
         result.Value!.ScanId.Should().Be(existingScan.Id);
         result.Value.Message.Should().Contain("already initiated");
         _scanRepo.Verify(r => r.AddAsync(It.IsAny<Scan>(), It.IsAny<CancellationToken>()), Times.Never);
+        _redis.Verify(r => r.PublishScanJob(It.IsAny<string>(), It.IsAny<ScanJob>(), It.IsAny<CancellationToken>()), Times.Never); 
     }
 }
  

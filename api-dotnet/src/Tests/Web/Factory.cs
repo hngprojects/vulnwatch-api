@@ -92,6 +92,7 @@ public class VulnWatchWebAppFactory : WebApplicationFactory<Program>, IAsyncLife
 
     public new async Task DisposeAsync()
     {
+        await base.DisposeAsync();
         if (_connection is not null)
             await _connection.DisposeAsync();
     }
@@ -107,9 +108,26 @@ public class VulnWatchWebAppFactory : WebApplicationFactory<Program>, IAsyncLife
         var user = User.Create(email, "Tony", "Dev");
         user.ConfirmEmail();
 
-        await userManager.CreateAsync(user, password);
+        var result = await userManager.CreateAsync(user, password);
+
+        if (!result.Succeeded)
+        {
+            var errors = string.Join(
+                "; ",
+                result.Errors.Select(e => $"{e.Code}: {e.Description}"));
+
+            throw new InvalidOperationException(
+                $"Failed to create authenticated test user '{email}'. Errors: {errors}");
+        }
 
         var created = await userManager.FindByEmailAsync(email);
+
+        if (created is null)
+        {
+            throw new InvalidOperationException(
+                $"User '{email}' was created successfully but could not be retrieved.");
+        }
+        
         var token = jwtService.GenerateToken(created!);
 
         return (created!, token);

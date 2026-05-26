@@ -108,7 +108,7 @@ public class AuthControllerTests : IClassFixture<VulnWatchWebAppFactory>
     }
 
     [Fact]
-    public async Task POST_auth_login_UnknownEmail_Returns400()
+    public async Task POST_auth_login_UnknownEmail_Returns401()
     {
         var response = await _client.PostAsJsonAsync("/api/auth/login", new
         {
@@ -122,7 +122,7 @@ public class AuthControllerTests : IClassFixture<VulnWatchWebAppFactory>
     // POST /api/auth/verify ───────────────────────────────────────────────────
 
     [Fact]
-    public async Task GET_auth_verify_InvalidToken_Returns401()
+    public async Task GET_auth_verify_UnknownUser_Returns404()
     {
         var response = await _client.GetAsync(
             $"/api/auth/verify?userId={Guid.NewGuid()}&token=invalid-token");
@@ -133,7 +133,7 @@ public class AuthControllerTests : IClassFixture<VulnWatchWebAppFactory>
     // POST /api/auth/resend ───────────────────────────────────────────────────
 
     [Fact]
-    public async Task POST_auth_resend_UnknownEmail_Returns404()
+    public async Task POST_auth_resend_UnknownEmail_Returns200()  
     {
         var response = await _client.PostAsJsonAsync("/api/auth/resend", new
         {

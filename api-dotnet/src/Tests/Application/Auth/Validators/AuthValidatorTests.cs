@@ -42,6 +42,15 @@ public class LoginCommandValidatorTests
 public class StartScanCommandValidatorTests
 {
     private readonly StartScanCommandValidator _sut = new();
+
+     
+    [Fact]  
+    public void Validate_InvalidCoverage_HasCoverageError()  
+    {  
+        _sut.ShouldHaveValidationErrorFor(  
+            x => x.Coverage,  
+            new StartScanCommand("example.com", (ScanCoverage)999, SurfaceType.Dns, Guid.NewGuid()));  
+    }  
  
     [Fact]
     public void Validate_ValidCommand_NoErrors()

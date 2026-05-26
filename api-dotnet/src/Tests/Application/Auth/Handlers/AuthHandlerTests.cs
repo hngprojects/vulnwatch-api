@@ -133,6 +133,8 @@ public class LoginHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value!.AccessToken.Should().Be("access_token");
         result.Value.RefreshToken.Should().Be("refresh_token");
+        _refreshTokenRepo.Verify(r => r.AddAsync(It.IsAny<RefreshToken>(), It.IsAny<CancellationToken>()), Times.Once);
+        _refreshTokenRepo.Verify(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
