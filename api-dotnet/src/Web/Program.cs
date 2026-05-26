@@ -26,8 +26,10 @@ using Web.Configurations;
 using Web.Hubs;
 using Serilog;
 using Web.Workers;
+using Web.Workers.Alerts;
 using Web.Consumers;
-using Application.Services;
+using Application.Features.Alerts;
+using Application.Features.Alerts.SslExpiry;
 
 LoadDotEnv();
 
@@ -39,6 +41,7 @@ builder.Host.UseSerilog((ctx, config) =>
         .MinimumLevel.Information()
         .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
         .MinimumLevel.Override("Microsoft.EntityFrameworkCore", Serilog.Events.LogEventLevel.Warning)
+        .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Update", Serilog.Events.LogEventLevel.Fatal)
         .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
         .MinimumLevel.Override("StackExchange.Redis", Serilog.Events.LogEventLevel.Warning)
         .Enrich.FromLogContext()
@@ -216,13 +219,14 @@ builder.Services.AddSingleton<LookupClient>(_ =>
                 )
             );
 builder.Services.AddScoped<IDnsResolver, DnsResolver>();
+builder.Services.AddScoped<SslExpiryChecker>();
 builder.Services.AddSignalR();
 // builder.Services.AddHostedService<ScanResultConsumer>();
 builder.Services.AddHostedService<DomainIntelConsumer>();
 builder.Services.AddScoped<IAlertRepository, AlertRepository>();
 builder.Services.AddHostedService<AlertOutboxProcessor>();
 builder.Services.AddScoped<AlertDispatcher>();
-builder.Services.AddHostedService<SslExpiryChecker>();
+builder.Services.AddHostedService<SslExpiryWorker>();
 builder.Services.AddScoped<INotificationPreferencesRepository, NotificationPreferencesRepository>();
 
 var corsSettings = builder.Configuration

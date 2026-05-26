@@ -31,6 +31,7 @@ public interface IRefreshTokenRepository : IRepository<RefreshToken>
 
 public interface IDomainRepository : IRepository<ScannedDomain>
 {
+    Task<List<ScannedDomain>> GetDomainsWithExpiringCertificates(DateTimeOffset maxLookahead, CancellationToken ct = default);
     Task<ScannedDomain?> GetById(Guid domainId, CancellationToken ct = default);
     Task<ScannedDomain?> FindUserDomainById(Guid userId, Guid domainId, CancellationToken ct);
     Task<ScannedDomain?> FindActive(string domain, CancellationToken ct);

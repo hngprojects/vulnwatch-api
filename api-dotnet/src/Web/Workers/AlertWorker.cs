@@ -45,8 +45,13 @@ public class AlertOutboxProcessor : BackgroundService
 
         var pending = await alerts.GetPendingAsync(batchSize: 50, ct);
 
+        // _logger.LogInformation("Alert outbox processing {Count} pending alerts", pending.Count);
+
         foreach (var alert in pending)
         {
+            // _logger.LogInformation(
+            //     "Sending alert {AlertId} via {Channel} to user {UserId}",
+            //     alert.Id, alert.Channel, alert.UserId);
             try
             {
                 switch (alert.Channel)
@@ -57,17 +62,11 @@ public class AlertOutboxProcessor : BackgroundService
                             subject: alert.Subject,
                             body: alert.Body);
                         break;
-
-                    case AlertChannel.Slack:
-                        // wire up your Slack webhook here
-                        throw new NotSupportedException("Slack delivery is not implemented.");
-
-                    case AlertChannel.Push:
-                        // wire up your Push webhook here
-                        throw new NotSupportedException("Push delivery is not implemented.");
+                        // ...
                 }
 
                 alert.MarkSent();
+                // _logger.LogInformation("Alert {AlertId} sent successfully", alert.Id);
             }
             catch (Exception ex)
             {

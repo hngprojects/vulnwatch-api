@@ -1,8 +1,4 @@
 using System.Text.Json;
-using Application.Interfaces;
-using Application.Services;
-using Domain.Enums;
-using Domain.Events;
 using Microsoft.AspNetCore.SignalR;
 using StackExchange.Redis;
 using Web.Hubs;
