@@ -1,9 +1,9 @@
 package com.vulnwatch.worker.engine;
 
-import com.vulnwatch.worker.engine.domain.DnsEngine;
+import com.vulnwatch.worker.engine.domain.dnsrecon.DnsEngine;
 import com.vulnwatch.worker.engine.domain.HttpEngine;
 import com.vulnwatch.worker.engine.domain.Scanner;
-import com.vulnwatch.worker.engine.domain.SslEngine;
+import com.vulnwatch.worker.engine.domain.testssl.SslEngine;
 import com.vulnwatch.worker.model.EngineResult;
 import com.vulnwatch.worker.model.ScanJob;
 import lombok.extern.slf4j.Slf4j;
