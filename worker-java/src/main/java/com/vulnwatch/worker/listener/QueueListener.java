@@ -36,6 +36,7 @@ public class QueueListener implements Runnable {
     private final JedisPooled jedis;
     private final Map<String, JobProcessor> processors;
     private final ObjectMapper mapper;
+    private final CheckpointManager checkpointManager;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
     private volatile boolean running = true;
@@ -70,6 +71,12 @@ public class QueueListener implements Runnable {
 
         log.info("Received job [scanId={} domainId={} type={}]",
                 job.scanId(), job.domainId(), job.scanType());
+
+
+        // mark checkpoint before handing to processor
+        // If the worker crashes anywhere after this point, WorkerRunner
+        // will re-queue this job on the next startup.
+        checkpointManager.mark(job.scanId(), raw);
 
         JobProcessor processor = processors.get(job.scanType());
         if (processor == null) {

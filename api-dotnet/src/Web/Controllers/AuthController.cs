@@ -55,6 +55,16 @@ public class AuthController : ControllerBase
         return result.ToHttpResponse(this);
     }
 
+    [HttpPost("refresh-token")]
+    public async Task<ActionResult<Result<AuthResponse>>> RefreshToken(
+        RefreshTokenRequest request,
+        CancellationToken ct)
+    {
+        var result = await _mediator.Send(
+            new RefreshTokenCommand(request.RefreshToken), ct);
+        return result.ToHttpResponse(this);
+    }
+
     [HttpPost("google")]
     public async Task<ActionResult<Result<AuthResponse>>> GoogleLogin(GoogleLoginRequest request)
     {

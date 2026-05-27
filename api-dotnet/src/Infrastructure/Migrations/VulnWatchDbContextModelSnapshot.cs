@@ -90,6 +90,56 @@ namespace Infrastructure.Migrations
                     b.ToTable("Alerts");
                 });
 
+            modelBuilder.Entity("Domain.Entities.DomainSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DomainId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("LastMonitoredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("MonitoringEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("NextScheduledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("NotificationChannel")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ScanFrequency")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SslAlertThresholds")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("SslAlertThresholds");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DomainId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_DomainSettings_DomainId");
+
+                    b.HasIndex("MonitoringEnabled", "NextScheduledAt")
+                        .HasDatabaseName("IX_DomainSettings_DueForScan")
+                        .HasFilter("\"MonitoringEnabled\" = true");
+
+                    b.ToTable("DomainSettings");
+                });
+
             modelBuilder.Entity("Domain.Entities.Finding", b =>
                 {
                     b.Property<Guid>("Id")
@@ -711,6 +761,17 @@ namespace Infrastructure.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("AspNetUserTokens", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.DomainSettings", b =>
+                {
+                    b.HasOne("Domain.Entities.ScannedDomain", "Domain")
+                        .WithOne()
+                        .HasForeignKey("Domain.Entities.DomainSettings", "DomainId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Domain");
                 });
 
             modelBuilder.Entity("Domain.Entities.Finding", b =>

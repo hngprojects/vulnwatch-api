@@ -4,7 +4,7 @@ using Domain.Entities;
 using Domain.Enums;
 using Microsoft.AspNetCore.Identity;
 
-namespace Web.Workers;
+namespace Web.Workers.Alerts;
 
 public class AlertOutboxProcessor : BackgroundService
 {

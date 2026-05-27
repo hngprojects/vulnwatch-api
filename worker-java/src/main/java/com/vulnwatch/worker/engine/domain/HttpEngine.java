@@ -7,11 +7,13 @@ import com.vulnwatch.worker.model.payload.HttpPayload;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+@Component
 public class HttpEngine implements Scanner {
 
     private static final List<String> REQUIRED_HEADERS = List.of(
