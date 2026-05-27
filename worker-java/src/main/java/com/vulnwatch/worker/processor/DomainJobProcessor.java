@@ -8,8 +8,8 @@ import com.vulnwatch.worker.model.AiResult;
 import com.vulnwatch.worker.model.DomainFinding;
 import com.vulnwatch.worker.model.DomainIntel;
 import com.vulnwatch.worker.model.ScanJob;
-import com.vulnwatch.worker.orchestrator.ScanOrchestrator;
-import com.vulnwatch.worker.orchestrator.ScanOrchestrator.OrchestratorResult;
+import com.vulnwatch.worker.orchestrator.DomainScanOrchestrator;
+import com.vulnwatch.worker.orchestrator.DomainScanOrchestrator.OrchestratorResult;
 import com.vulnwatch.worker.persistence.DomainPersistence;
 import com.vulnwatch.worker.publisher.DomainIntelPublisher;
 import com.vulnwatch.worker.state.ScanJobStateMachine;
@@ -30,7 +30,7 @@ public class DomainJobProcessor implements JobProcessor {
 
     private static final int BASE_SECURITY_SCORE = 100;
 
-    private final ScanOrchestrator scanOrchestrator;
+    private final DomainScanOrchestrator scanOrchestrator;
     private final AiEnricher aiEnricher;
     private final DomainCircuitBreakerAiEnricher surfaceAiEnricher;
     private final DomainPersistence persistence;

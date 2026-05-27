@@ -23,7 +23,7 @@ import java.util.concurrent.StructuredTaskScope;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class ScanOrchestrator {
+public class DomainScanOrchestrator {
 
     private final List<Scanner> scanners;
     private final ScannerRetryPolicy retryPolicy;
