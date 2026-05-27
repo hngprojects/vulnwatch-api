@@ -111,4 +111,10 @@ public class ScanOrchestrator {
             return engineResults.stream().noneMatch(EngineResult::success);
         }
     }
+
+    public List<SurfaceType> registeredSurfaces() {
+        return scanners.stream()
+                .map(Scanner::surfaceType)
+                .toList();
+    }
 }
