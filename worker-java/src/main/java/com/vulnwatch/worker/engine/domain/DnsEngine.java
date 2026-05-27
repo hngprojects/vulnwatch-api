@@ -4,6 +4,7 @@ import com.vulnwatch.worker.enums.SurfaceType;
 import com.vulnwatch.worker.model.EngineResult;
 import com.vulnwatch.worker.model.ScanJob;
 import com.vulnwatch.worker.model.payload.DnsPayload;
+import org.springframework.stereotype.Component;
 
 import javax.naming.directory.Attributes;
 import javax.naming.directory.InitialDirContext;
@@ -11,7 +12,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
+@Component
 public class DnsEngine implements Scanner {
 
     @Override
