@@ -1,14 +1,18 @@
 package com.vulnwatch.worker.processor;
 
-import com.vulnwatch.worker.ai.domain.SpringAiDomainEnricher;
-import com.vulnwatch.worker.engine.ParallelScanner;
+import com.vulnwatch.worker.ai.breaker.DomainCircuitBreakerAiEnricher;
+import com.vulnwatch.worker.ai.interfaces.AiEnricher;
+import com.vulnwatch.worker.enums.FindingSeverity;
+import com.vulnwatch.worker.listener.CheckpointManager;
 import com.vulnwatch.worker.model.AiResult;
 import com.vulnwatch.worker.model.DomainFinding;
 import com.vulnwatch.worker.model.DomainIntel;
-import com.vulnwatch.worker.model.EngineResult;
 import com.vulnwatch.worker.model.ScanJob;
+import com.vulnwatch.worker.orchestrator.ScanOrchestrator;
+import com.vulnwatch.worker.orchestrator.ScanOrchestrator.OrchestratorResult;
 import com.vulnwatch.worker.persistence.DomainPersistence;
 import com.vulnwatch.worker.publisher.DomainIntelPublisher;
+import com.vulnwatch.worker.state.ScanJobStateMachine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -17,57 +21,78 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Orchestrates a full domain scan:
- *   1. AI description (best-effort)
- *   2. Parallel DNS / SSL / HTTP engine scan
- *   3. Per-result AI enrichment
- *   4. Security score computation
- *   5. Persistence to PostgreSQL
- *   6. Redis publish for downstream consumers
+ * Orchestrates a full domain scan pipeline from initialization to persistence and notification.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class DomainJobProcessor implements JobProcessor {
 
-    private final ParallelScanner scanner;
-    private final SpringAiDomainEnricher enricher;
+    private static final int BASE_SECURITY_SCORE = 100;
+
+    private final ScanOrchestrator scanOrchestrator;
+    private final AiEnricher aiEnricher;
+    private final DomainCircuitBreakerAiEnricher surfaceAiEnricher;
     private final DomainPersistence persistence;
     private final DomainIntelPublisher publisher;
+    private final ScanJobStateMachine stateMachine;
+    private final CheckpointManager checkpointManager;
 
     @Override
     public void process(ScanJob job) {
-        log.info("Starting domain scan [scanId={} domain={}]", job.scanId(), job.domainName());
+        String scanId = job.scanId();
+        log.info("Starting domain scan [scanId={} domain={}]", scanId, job.domainName());
 
-        describeJob(job);
-        List<EngineResult> engineResults = runEngines(job);
-        List<AiResult> enrichments = enrichResults(job, engineResults);
-        int score = computeScore(enrichments);
+        // Pass surfaces derived from registered scanners — not hardcoded
+        stateMachine.start(scanId, scanOrchestrator.registeredSurfaces());
 
-        log.info("Security score [scanId={} score={}]", job.scanId(), score);
+        try {
+            executeScanPipeline(job);
+            stateMachine.advance(scanId);
+            checkpointManager.clear(scanId);
+        } catch (Exception e) {
+            handlePipelineFailure(job, e);
+        }
+    }
+
+    private void executeScanPipeline(ScanJob job) {
+        describeJobBestEffort(job);
+
+        OrchestratorResult result = scanOrchestrator.scan(job);
+
+        int score = computeScore(result.aiResults());
+        log.info("Security score calculated [scanId={} score={}]", job.scanId(), score);
 
         List<DomainFinding> findings = persistence.saveFindings(
-                                                            job.scanId(),
-                                                            job.domainId(),
-                                                            engineResults,
-                                                            enrichments,
-                                                            score);
+                job.scanId(),
+                job.domainId(),
+                result.engineResults(),
+                result.aiResults(),
+                score
+        );
 
         if (findings.isEmpty()) {
             log.warn("No findings persisted [scanId={}]", job.scanId());
-            return;
         }
 
-        publisher.publishSuccess(job, DomainIntel.of(job, score));
+        publisher.publishSuccess(
+                job,
+                DomainIntel.of(job, score, surfaceAiEnricher.currentAvailability())
+        );
+
         log.info("Domain scan complete [scanId={}]", job.scanId());
     }
 
+    private void handlePipelineFailure(ScanJob job, Exception e) {
+        log.error("Domain scan failed [scanId={}]", job.scanId(), e);
+        stateMachine.fail(job.scanId());
+        publisher.publishFailure(job, e.getMessage());
+        // Leave checkpoint in place on unexpected failure for crash-resume tracking
+    }
 
-
-    /** Best-effort AI description — failure is logged but never fatal. */
-    private void describeJob(ScanJob job) {
+    private void describeJobBestEffort(ScanJob job) {
         try {
-            String description = enricher.describe(job);
+            String description = aiEnricher.describe(job);
             if (description != null) {
                 log.info("Job description [scanId={}]: {}", job.scanId(), description);
             }
@@ -76,36 +101,14 @@ public class DomainJobProcessor implements JobProcessor {
         }
     }
 
-    /** Runs DNS, SSL, and HTTP engines in parallel. Throws to trigger a retry on failure. */
-    private List<EngineResult> runEngines(ScanJob job) {
-        try {
-            return scanner.scan(job);
-        } catch (Exception e) {
-            log.error("Parallel scan failed [scanId={}]", job.scanId(), e);
-            throw new RuntimeException("Parallel scan failed for scanId=%s".formatted(job.scanId()), e);
-        }
-    }
-
-    /** Enriches each engine result via AI sequentially to stay within rate limits. */
-    private List<AiResult> enrichResults(ScanJob job, List<EngineResult> engineResults) {
-        return engineResults.stream()
-                .map(result -> enricher.enrich(job, result))
-                .toList(); // null entries handled gracefully by persistence layer
-    }
-
-
-
     private int computeScore(List<AiResult> enrichments) {
         int deductions = enrichments.stream()
                 .filter(Objects::nonNull)
-                .mapToInt(e -> switch (e.severity()) {
-                    case "Critical" -> 30;
-                    case "High" -> 20;
-                    case "Medium" -> 10;
-                    case "Low" ->  5;
-                    default  ->  0;
-                })
+                .map(AiResult::severity)
+                .map(FindingSeverity::fromName)
+                .mapToInt(FindingSeverity::getDeduction)
                 .sum();
-        return Math.max(0, 100 - deductions);
+
+        return Math.max(0, BASE_SECURITY_SCORE - deductions);
     }
 }
