@@ -23,7 +23,9 @@ public class JwtService : IJwtService
     public string GenerateToken(User user)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:SecretKey"]!));
-        var expireMinutes = int.Parse(_config["Jwt:ExpireInMinute"] ?? "60");
+        
+        var expireMinutesRaw = _config["Jwt:ExpireInMinute"];
+        var expireMinutes = int.TryParse(expireMinutesRaw, out var minutes) && minutes > 0 ? minutes : 60;
 
         var claims = new[]
         {
@@ -81,11 +83,11 @@ public class JwtService : IJwtService
             var picture   = principal.FindFirstValue(AppClaimTypes.Picture);
             var role = principal.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
 
-            if (userId is null || email is null)
+            if (userId is null || email is null || !Guid.TryParse(userId, out var parsedUserId))
                 return Result<TokenClaims>.Failure(Error.Unauthorized("Token is invalid"));
 
             return Result<TokenClaims>.Success(new TokenClaims(
-                Guid.Parse(userId), email, firstName, lastName, picture));
+                parsedUserId, email, firstName, lastName, picture));
         }
         catch (SecurityTokenMalformedException)
         {

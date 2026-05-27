@@ -36,9 +36,12 @@ public class RefreshTokenHandler(
 
         // Rotate: revoke current, issue new pair
         stored.Revoke();
-        await refreshTokenRepo.SaveChangesAsync(ct);
+        // await refreshTokenRepo.SaveChangesAsync(ct);
 
-        var expireDays = int.Parse(config["Jwt:RefreshTokenExpiryDays"] ?? "7");
+        var rawExpireDays = config["Jwt:RefreshTokenExpiryDays"];
+        var parsed = int.TryParse(rawExpireDays, out var days) ? days : 7;
+        var expireDays = parsed > 0 ? parsed : 7;
+
         var newRefreshToken = jwt.GenerateRefreshToken();
 
         await refreshTokenRepo.AddAsync(

@@ -12,10 +12,10 @@ public class CurrentUser : ICurrentUser
         => _httpContextAccessor = httpContextAccessor;
 
     private ClaimsPrincipal User =>
-        _httpContextAccessor.HttpContext!.User;
+        _httpContextAccessor.HttpContext!.User ?? new ClaimsPrincipal();
 
     public Guid UserId =>
-Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : Guid.Empty    ;
 
     public string? FirstName =>
         NullIfEmpty(User.FindFirstValue(AppClaimTypes.FirstName));

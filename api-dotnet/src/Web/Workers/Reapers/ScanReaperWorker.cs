@@ -15,7 +15,15 @@ public class ScanReaperWorker(
     {
         while (!ct.IsCancellationRequested)
         {
-            await ReapAbandonedScans(ct);
+            try
+            {
+                await ReapAbandonedScans(ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                logger.LogError(ex, "ScanReaperWorker tick failed");
+            }
+
             await Task.Delay(TimeSpan.FromMinutes(10), ct);
         }
     }

@@ -191,11 +191,16 @@ public class AuthControllerTests : IClassFixture<VulnWatchWebAppFactory>
         var (_, _) = await _factory.CreateAuthenticatedUserAsync(email, password);
         var loginResponse = await _client.PostAsJsonAsync("/api/auth/login",
             new { email, password });
+        
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
         var loginBody = await loginResponse.Content.ReadFromJsonAsync<JsonElement>();
         var refreshToken = loginBody
             .GetProperty("value")
             .GetProperty("refreshToken")
             .GetString();
+
+        refreshToken.Should().NotBeNullOrWhiteSpace();
 
         // Use it once — succeeds
         var first = await _client.PostAsJsonAsync("/api/auth/refresh-token",
