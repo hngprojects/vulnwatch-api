@@ -35,19 +35,3 @@ internal static class MonitoringSettingsMappings
 }
 
 
-// public class MonitoringSettingsMapping : Profile
-// {
-//     public MonitoringSettingsMapping()
-//     {
-//         CreateMap<DomainSettings, MonitoringSettingsDto>()
-//             .ForMember(dest => dest.DomainName, opt => opt.MapFrom(src => src.Domain.DomainName))
-//             .ForMember(dest => dest.NextScanIn, opt => opt.Ignore()) // handled in handler
-//             .ForMember(dest => dest.SslAlertThresholds, opt => opt.MapFrom(src =>
-//                 src.SslAlertThresholds.Split(',', StringSplitOptions.RemoveEmptyEntries)
-//                     .Select(int.Parse)
-//                     .ToArray()))
-//             .ForMember(dest => dest.NotificationChannels, opt => opt.MapFrom(src =>
-//                 src.NotificationChannel.Split(',', StringSplitOptions.RemoveEmptyEntries)
-//                     .ToArray()));
-//     }
-// }

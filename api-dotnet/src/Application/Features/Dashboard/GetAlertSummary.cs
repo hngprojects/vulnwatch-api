@@ -12,7 +12,7 @@ public class GetDashboardAlertsValidator : AbstractValidator<GetDashboardAlertsQ
     public GetDashboardAlertsValidator()
     {
         RuleFor(x => x.Limit)
-            .InclusiveBetween(1, 100);
+            .InclusiveBetween(1, 50);
     }
 }
 
