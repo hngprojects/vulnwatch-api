@@ -24,7 +24,7 @@ public class AiAvailabilityGate {
     private final ObjectMapper mapper;
 
     @Value("${worker.ai.status.key:ai:status}")
-    private final String aiStatusKey;
+    private String aiStatusKey;
 
     @Value("${worker.ai.status.ttl-seconds:300}")
     private long ttlSeconds;
