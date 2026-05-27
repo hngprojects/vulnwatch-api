@@ -20,6 +20,7 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
     public DbSet<Finding> Findings => Set<Finding>();
     public DbSet<Remediation> Remediations => Set<Remediation>();
     public DbSet<Integration> Integrations => Set<Integration>();
+    public DbSet<SlackIntegration> SlackIntegrations => Set<SlackIntegration>();
     public DbSet<MonitoredRepository> MonitoredRepositories => Set<MonitoredRepository>();
     public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
     public DbSet<WebHookOutBox> WebHookOutBox => Set<WebHookOutBox>();
@@ -168,6 +169,19 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
              .HasDatabaseName("IX_Integrations_UserId_Status");
         });
 
+        builder.Entity<SlackIntegration>(e =>
+        {
+            e.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(s => s.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+            // One active integration per user+team
+            e.HasIndex(s => new { s.UserId, s.TeamId })
+            .IsUnique()
+            .HasDatabaseName("IX_SlackIntegrations_UserId_TeamId");
+        });
+
         builder.Entity<MonitoredRepository>(e =>
         {
             e.HasIndex(r => r.RepoId).IsUnique();
@@ -201,23 +215,18 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
 
         builder.Entity<Alert>(e =>
         {
-            e.HasIndex(a => new { a.UserId, a.Type, a.DomainId, a.DeduplicationKey })
-            .IsUnique()
-            .HasDatabaseName("IX_Alerts_Deduplication");
+            e.HasIndex(a => new { a.UserId, a.Type, a.DomainId, a.Channel, a.DeduplicationKey })
+                .IsUnique()
+                .HasDatabaseName("IX_Alerts_Deduplication");
 
-            e.Property(a => a.Status)
-            .HasConversion<string>();
-        
-            e.HasIndex(a => new { a.UserId, a.Type, a.DomainId, a.DeduplicationKey })
-            .IsUnique()
-            .HasDatabaseName("IX_Alerts_Deduplication");
-        
+            e.Property(a => a.Status).HasConversion<string>();
+
             e.HasIndex(a => new { a.UserId, a.CreatedAt })
-            .HasDatabaseName("IX_Alerts_UserId_CreatedAt");
-        
+                .HasDatabaseName("IX_Alerts_UserId_CreatedAt");
+
             e.HasIndex(a => new { a.Channel, a.CreatedAt })
-            .HasFilter("\"Status\" = 'Pending'")
-            .HasDatabaseName("IX_Alerts_Pending_Channel_CreatedAt");
+                .HasFilter("\"Status\" = 'Pending'")
+                .HasDatabaseName("IX_Alerts_Pending_Channel_CreatedAt");
         });
     }
 }

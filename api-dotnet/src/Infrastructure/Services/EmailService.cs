@@ -51,7 +51,7 @@ public class EmailService : IEmailService
 
             await client.SendMailAsync(mail);
 
-            _logger.LogInformation("Email sent to {Recipient} with subject '{Subject}'.", to, subject);
+            // _logger.LogInformation("Email sent to {Recipient} with subject '{Subject}'.", to, subject);
             return;
         }
         catch (SmtpException ex)

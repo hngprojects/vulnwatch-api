@@ -33,9 +33,9 @@ public sealed class SslExpiryCheckService(
         if (!thresholds.Contains(daysRemaining))
             return;
 
-        logger.LogInformation(
-            "SSL expiry alert threshold hit for {Domain} — {Days} days remaining",
-            domain.DomainName, daysRemaining);
+        // logger.LogInformation(
+        //     "SSL expiry alert threshold hit for {Domain} — {Days} days remaining",
+        //     domain.DomainName, daysRemaining);
 
         await alertDispatcher.DispatchAsync(new SslExpiryEvent(
             DomainId:      domain.Id,

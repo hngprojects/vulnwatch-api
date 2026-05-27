@@ -108,7 +108,6 @@ public sealed class MonitoringWorker(
 
         logger.LogDebug("Processing monitoring for {Domain}", domainName);
 
-        // Run the three checks — each is independent, failures are isolated
         await RunGuarded(() => scanDispatch.DispatchAsync(settings, ct),
             "scan dispatch", domainName);
 
@@ -118,14 +117,8 @@ public sealed class MonitoringWorker(
         await RunGuarded(() => ownershipCheck.CheckAsync(settings, ct),
             "ownership check", domainName);
 
-        // Always advance NextScheduledAt even if some checks failed —
-        // we don't want a broken domain to block the queue
         settings.RecordMonitoringRun();
         await settingsRepo.SaveChangesAsync(ct);
-
-        logger.LogInformation(
-            "Monitoring scheduled for {Domain} — next run at {Next:u}",
-            domainName, settings.NextScheduledAt);
     }
 
     private async Task RunGuarded(

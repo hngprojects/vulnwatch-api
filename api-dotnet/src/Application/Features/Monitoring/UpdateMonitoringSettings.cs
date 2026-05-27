@@ -19,6 +19,7 @@ public record UpdateMonitoringSettingsCommand(
 public class UpdateMonitoringSettingsHandler(
     IDomainRepository domains,
     IDomainSettingsRepository settingsRepo,
+    ISlackIntegrationRepository slackRepo,
     ICurrentUser currentUser)
     : IRequestHandler<UpdateMonitoringSettingsCommand, Result<MonitoringSettingsDto>>
 {
@@ -34,8 +35,19 @@ public class UpdateMonitoringSettingsHandler(
 
         if (domain.VerificationStatus != VerificationStatus.Verified)
             return Result<MonitoringSettingsDto>.Failure(
-                Error.Forbidden(
-                    "Monitoring can only be configured for verified domains."));
+                Error.Forbidden("Monitoring can only be configured for verified domains."));
+
+        if (cmd.NotificationChannels.Contains(AlertChannel.Slack))
+        {
+            var slackIntegration = await slackRepo
+                .GetActiveByUserId(currentUser.UserId, ct);
+
+            if (slackIntegration is null)
+                return Result<MonitoringSettingsDto>.Failure(
+                    Error.Validation(
+                        "Cannot enable Slack notifications — no active Slack integration found. " +
+                        "Connect Slack first via Integrations."));
+        }
 
         var existing = await settingsRepo.GetByDomainId(cmd.DomainId, ct);
 
@@ -58,8 +70,7 @@ public class UpdateMonitoringSettingsHandler(
         }
         catch (ArgumentException ex)
         {
-            return Result<MonitoringSettingsDto>.Failure(
-                Error.Validation(ex.Message));
+            return Result<MonitoringSettingsDto>.Failure(Error.Validation(ex.Message));
         }
 
         await settingsRepo.SaveChangesAsync(ct);

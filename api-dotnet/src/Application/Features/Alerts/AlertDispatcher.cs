@@ -12,15 +12,18 @@ public class AlertDispatcher
 {
     private readonly IAlertRepository _alerts;
     private readonly INotificationPreferencesRepository _prefs;
+    private readonly IDomainSettingsRepository _domainSettings;
     private readonly ILogger<AlertDispatcher> _logger;
 
     public AlertDispatcher(
         IAlertRepository alerts,
         INotificationPreferencesRepository prefs,
+        IDomainSettingsRepository domainSettings,
         ILogger<AlertDispatcher> logger)
     {
         _alerts = alerts;
         _prefs = prefs;
+        _domainSettings = domainSettings;
         _logger = logger;
     }
 
@@ -31,9 +34,9 @@ public class AlertDispatcher
             case SslExpiryEvent e:
                 await HandleSslExpiry(e, ct);
                 break;
-            // case ScanCompletedEvent e:
-            //     await HandleScanCompleted(e, ct);
-            //     break;
+            case ScanCompletedEvent e:
+                await HandleScanCompleted(e, ct);
+                break;
             default:
                 _logger.LogWarning("No handler registered for event type {EventType}",
                     domainEvent.GetType().Name);
@@ -41,101 +44,85 @@ public class AlertDispatcher
         }
     }
 
-    // ── SSL Expiry ─────────────────────────────────────────────────────────────
-
     private async Task HandleSslExpiry(SslExpiryEvent e, CancellationToken ct)
     {
-        // _logger.LogInformation("Dispatching SSL expiry alert for domain {DomainName}", e.DomainName);
+        var domainSettings = await _domainSettings.GetByDomainId(e.DomainId, ct);
+        var channels = domainSettings is not null
+            ? ResolveDomainChannels(domainSettings.NotificationChannel)
+            : [AlertChannel.Email];
 
-        var prefs = await _prefs.GetByUserId(e.UserId, ct);
-        var channels = ResolveChannels(prefs);
-
-        // _logger.LogInformation(
-        //     "Resolved {Count} channels for user {UserId}: {Channels}",
-        //     channels.Count, e.UserId, string.Join(", ", channels));
+        var deduplicationKey = DateTime.UtcNow.ToString("yyyy-MM-dd");
 
         foreach (var channel in channels)
         {
+            var alreadyExists = await _alerts.ExistsForToday(
+                e.UserId, AlertType.SslExpiry, e.DomainId, channel, deduplicationKey, ct);
+
+            if (alreadyExists)
+            {
+                continue;
+            }
+
             var alert = SslExpiryAlertFactory.Create(e, channel);
             await _alerts.AddAsync(alert, ct);
-
-
-            try
-            {
-                await _alerts.SaveChangesAsync(ct);
-                // _logger.LogInformation("SSL expiry alerts saved for domain {DomainName}", e.DomainName);
-            }
-            catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
-            {
-                // _logger.LogWarning(
-                //     "Duplicate SSL expiry alert suppressed for domain {DomainName}", e.DomainName);
-                _alerts.DetachUnsavedAlerts();
-            }
+            await _alerts.SaveChangesAsync(ct);
         }
     }
 
-    // ── Scan Completed ─────────────────────────────────────────────────────────
-
-    // private async Task HandleScanCompleted(ScanCompletedEvent e, CancellationToken ct)
-    // {
-    //     _logger.LogInformation(
-    //         "Dispatching scan completed alert for domain {DomainName}, score {Score}",
-    //         e.DomainName, e.SecurityScore);
-
-    //     var prefs = await _prefs.GetByUserId(e.UserId, ct);
-    //     var channels = ResolveChannels(prefs);
-
-    //     _logger.LogInformation(
-    //         "Resolved {Count} channels for user {UserId}: {Channels}",
-    //         channels.Count, e.UserId, string.Join(", ", channels));
-
-    //     foreach (var channel in channels)
-    //     {
-    //         var alert = ScanCompletedAlertFactory.Create(e, channel);
-    //         await _alerts.AddAsync(alert, ct);
-    //     }
-
-    //     try
-    //     {
-    //         await _alerts.SaveChangesAsync(ct);
-    //         _logger.LogInformation(
-    //             "Scan completed alerts saved for domain {DomainName}", e.DomainName);
-    //     }
-    //     catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
-    //     {
-    //         _logger.LogWarning(
-    //             "Duplicate scan completed alert suppressed for domain {DomainName}", e.DomainName);
-    //         _alerts.DetachUnsavedAlerts();
-    //     }
-    // }
-
-    // ── Shared helpers ─────────────────────────────────────────────────────────
-
-    private static List<AlertChannel> ResolveChannels(NotificationPreferences? prefs)
+    private async Task HandleScanCompleted(ScanCompletedEvent e, CancellationToken ct)
     {
-        if (prefs is null)
-            return [AlertChannel.Email]; // safe default
+        var domainSettings = await _domainSettings.GetByDomainId(e.DomainId, ct);
+        var channels = domainSettings is not null
+            ? ResolveDomainChannels(domainSettings.NotificationChannel)
+            : [AlertChannel.Email];
 
-        var channels = new List<AlertChannel>();
-        if (prefs.EmailAlerts) channels.Add(AlertChannel.Email);
-        if (prefs.SlackAlerts) channels.Add(AlertChannel.Slack);
-        if (prefs.PushNotifications) channels.Add(AlertChannel.Push);
-        return channels;
-    }
+        var deduplicationKey = e.ScanId.ToString();
 
-    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
-    {
-        var inner = ex.InnerException;
+        var hasCritical = e.FindingSeverities.Any(s => s == FindingSeverity.Critical);
+        var severity = hasCritical ? AlertSeverity.Critical : AlertSeverity.Info;
+        var subject = hasCritical
+            ? $"Critical findings detected on {e.DomainName} — score {e.SecurityScore}"
+            : $"Scan completed for {e.DomainName} — score {e.SecurityScore}";
 
-        if (inner?.GetType().FullName == "Npgsql.PostgresException")
+        var body = $"Scan completed for {e.DomainName}. " +
+                   $"Security score: {e.SecurityScore}. " +
+                   $"Findings: {e.FindingSeverities.Count} " +
+                   $"({e.FindingSeverities.Count(s => s == FindingSeverity.Critical)} critical).";
+
+        foreach (var channel in channels)
         {
-            const string uniqueViolationSqlState = "23505";
-            var sqlState = inner.GetType()
-                .GetProperty("SqlState")?
-                .GetValue(inner) as string;
-            return sqlState == uniqueViolationSqlState;
-        }
+            var alreadyExists = await _alerts.ExistsForToday(
+                e.UserId, AlertType.ScanCompleted, e.DomainId, channel, deduplicationKey, ct);
 
-        return false;
+            if (alreadyExists)
+            {
+                _logger.LogDebug(
+                    "Scan completed alert for {DomainName} via {Channel} already exists — skipping",
+                    e.DomainName, channel);
+                continue;
+            }
+
+            var alert = Alert.Create(
+                userId: e.UserId,
+                type: AlertType.ScanCompleted,
+                channel: channel,
+                severity: severity,
+                deduplicationKey: deduplicationKey,
+                subject: subject,
+                body: body,
+                domainId: e.DomainId);
+
+            await _alerts.AddAsync(alert, ct);
+            await _alerts.SaveChangesAsync(ct);
+        }
+    }
+
+    private static List<AlertChannel> ResolveDomainChannels(AlertChannel channel)
+    {
+        var channels = new List<AlertChannel>();
+        if (channel.HasFlag(AlertChannel.Email)) channels.Add(AlertChannel.Email);
+        if (channel.HasFlag(AlertChannel.Slack)) channels.Add(AlertChannel.Slack);
+        if (channel.HasFlag(AlertChannel.Push)) channels.Add(AlertChannel.Push);
+        return channels.Count > 0 ? channels : [AlertChannel.Email];
     }
 }

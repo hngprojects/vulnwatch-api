@@ -65,7 +65,6 @@ public class StartScanHandler : IRequestHandler<StartScanCommand, Result<StartSc
         if (domain.VerificationStatus != VerificationStatus.Verified)
             return Result<StartScanResponse>.Failure(Error.Forbidden("Domain ownership unverified! Verify before initiating a scan."));
 
-        // Idempotency check — same request retried or double-submitted
         var existingByKey = await _scanRepo.FindByIdempotencyKey(cmd.IdempotencyKey, ct);
         if (existingByKey is not null)
             return Result<StartScanResponse>.Success(
@@ -75,7 +74,6 @@ public class StartScanHandler : IRequestHandler<StartScanCommand, Result<StartSc
 
         try
         {
-            // Concurrency check — different request but scan already running on this domain
             var running = await _scanRepo.FindRunningByDomain(domain.Id, ct);
             if (running is not null)
             {
@@ -99,19 +97,15 @@ public class StartScanHandler : IRequestHandler<StartScanCommand, Result<StartSc
 
             await tx.CommitAsync(ct);
 
-            // Publish after commit — worker only sees jobs backed by a committed row
             await _redis.PublishScanJob("scan-jobs", new ScanJob(
                 domain.Id, domain.DomainName, scan.Id,
                 ScanTargetType.Domain.ToString(), scan.SurfaceTypes.ToString(),  userId, scan.CreatedAt), ct);
-
-            _logger.LogInformation("Scan {ScanId} queued for domain {DomainId}", scan.Id, domain.Id);
 
             return Result<StartScanResponse>.Success(
                 new StartScanResponse(scan.Id, scan.Status, "Scan started successfully."));
         }
         catch (Exception ex)
         {
-            // await tx.RollbackAsync(ct);
             _logger.LogError(ex, "Failed to start scan for domain {DomainId}", domain.Id);
             return Result<StartScanResponse>.Failure(Error.Internal("Failed to start scan. Please try again."));
         }
