@@ -31,6 +31,7 @@ using Web.Consumers;
 using Application.Features.Alerts;
 using Application.Features.Alerts.SslExpiry;
 using Web.Workers.Monitoring;
+using Web.Workers.Reapers;
 
 LoadDotEnv();
 
@@ -232,6 +233,7 @@ builder.Services.AddScoped<ScanDispatchService>();
 builder.Services.AddScoped<SslExpiryCheckService>();
 builder.Services.AddScoped<OwnershipCheckService>();
 builder.Services.AddHostedService<MonitoringWorker>();
+builder.Services.AddHostedService<ScanReaperWorker>();
 builder.Services.AddScoped<INotificationPreferencesRepository, NotificationPreferencesRepository>();
 builder.Services.AddScoped<IDomainSettingsRepository, DomainSettingsRepository>();
 

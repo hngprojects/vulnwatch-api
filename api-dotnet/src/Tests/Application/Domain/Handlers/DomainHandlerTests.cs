@@ -135,6 +135,8 @@ public class VerifyDomainHandlerTests
  
         _currentUser.Setup(c => c.UserId).Returns(_userId);
         _domains.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        _domainSettings.Setup(r => r.ExistsForDomain(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _domainSettings.Setup(r => r.AddAsync(It.IsAny<DomainSettings>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
     }
  
     [Fact]

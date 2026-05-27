@@ -11,7 +11,6 @@ public sealed class ScanDispatchService(
     IRedisService redis,
     ILogger<ScanDispatchService> logger)
 {
-    // Returns true if a scan was enqueued, false if one was already running
     public async Task<bool> DispatchAsync(
         DomainSettings settings,
         CancellationToken ct)
@@ -19,7 +18,6 @@ public sealed class ScanDispatchService(
         var domainId = settings.DomainId;
         var domainName = settings.Domain.DomainName;
 
-        // Guard — never queue if a scan is already in flight
         var running = await scanRepo.FindRunningByDomain(domainId, ct);
         if (running is not null)
         {
@@ -59,10 +57,18 @@ public sealed class ScanDispatchService(
                 "Failed to publish scan job for {Domain} (scan {ScanId}) — marking as Failed",
                 domainName, scan.Id);
 
-            // Compensation: prevent the persisted record from blocking future dispatches.
-            // FindRunningByDomain would otherwise match this scan forever.
             scan.Fail();
-            await scanRepo.SaveChangesAsync(ct);
+
+            try
+            {
+                await scanRepo.SaveChangesAsync(CancellationToken.None);
+            }
+            catch (Exception compensationEx)
+            {
+                logger.LogError(compensationEx,
+                    "Compensation save also failed for scan {ScanId} — record may be stuck",
+                    scan.Id);
+            }
 
             return false;
         }

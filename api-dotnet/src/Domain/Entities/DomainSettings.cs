@@ -63,8 +63,15 @@ public class DomainSettings : EntityBase
         MonitoringEnabled = monitoringEnabled;
         ScanFrequency = scanFrequency;
         NotificationChannel = notificationChannels;
-        _sslAlertThresholds = string.Join(",",
-            sslAlertThresholds.Distinct().OrderDescending());
+
+        var normalizedThresholds = sslAlertThresholds
+            .Distinct()
+            .OrderDescending()
+            .ToArray();
+        var serializedThresholds = string.Join(",", normalizedThresholds);
+        if (serializedThresholds.Length > 50)
+            throw new ArgumentException("Too many SSL alert thresholds.");
+        _sslAlertThresholds = serializedThresholds;
 
         if (!monitoringEnabled)
         {

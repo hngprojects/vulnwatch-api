@@ -4,11 +4,29 @@ using Domain.Common;
 using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using FluentValidation;
 
 namespace Application.Features.Dashboard;
 
+public class GetDashboardDomainsQueryValidator
+    : AbstractValidator<GetDashboardDomainsQuery>
+{
+    public GetDashboardDomainsQueryValidator()
+    {
+        RuleFor(x => x.Page)
+            .GreaterThan(0)
+            .WithMessage("Page must be greater than 0.");
+
+        RuleFor(x => x.PageSize)
+            .GreaterThan(0)
+            .WithMessage("PageSize must be greater than 0.")
+            .LessThanOrEqualTo(50)
+            .WithMessage("PageSize cannot exceed 50.");
+    }
+}
+
 public record GetDashboardDomainsQuery(
-    int Page     = 1,
+    int Page = 1,
     int PageSize = 10)
     : IRequest<Result<PagedResult<DashboardDomainRowDto>>>;
 
@@ -23,7 +41,7 @@ public class GetDashboardDomainsHandler(
     {
         var userId   = currentUser.UserId;
         var today    = DateTime.UtcNow.Date;
-        var pageSize = Math.Min(query.PageSize, 50);
+        var pageSize = query.PageSize;
 
         var rows = await db.Domains
             .Where(d => d.UserId == userId)
@@ -42,32 +60,22 @@ public class GetDashboardDomainsHandler(
                     .Select(s => (bool?)s.MonitoringEnabled)
                     .FirstOrDefault() ?? false,
 
-                LatestScore = d.Scans
+                // Single subquery — finds the latest completed scan once,
+                // then projects all needed properties from it.
+                LatestScan = d.Scans
                     .Where(s => s.Status == ScanStatus.Completed)
                     .OrderByDescending(s => s.CompletedAt)
-                    .Select(s => (int?)s.SecurityScore)
+                    .Select(s => new
+                    {
+                        s.SecurityScore,
+                        s.CompletedAt,
+                        CriticalCount = s.Findings
+                            .Count(f => f.Status == FindingStatus.Open
+                                     && f.Severity == FindingSeverity.Critical),
+                        OpenCount = s.Findings
+                            .Count(f => f.Status == FindingStatus.Open)
+                    })
                     .FirstOrDefault(),
-
-                LatestScanAt = d.Scans
-                    .Where(s => s.Status == ScanStatus.Completed)
-                    .OrderByDescending(s => s.CompletedAt)
-                    .Select(s => (DateTime?)s.CompletedAt)
-                    .FirstOrDefault(),
-
-                CriticalCount = d.Scans
-                    .Where(s => s.Status == ScanStatus.Completed)
-                    .OrderByDescending(s => s.CompletedAt)
-                    .Take(1)
-                    .SelectMany(s => s.Findings)
-                    .Count(f => f.Status == FindingStatus.Open
-                             && f.Severity == FindingSeverity.Critical),
-
-                OpenCount = d.Scans
-                    .Where(s => s.Status == ScanStatus.Completed)
-                    .OrderByDescending(s => s.CompletedAt)
-                    .Take(1)
-                    .SelectMany(s => s.Findings)
-                    .Count(f => f.Status == FindingStatus.Open),
 
                 SslDays = d.SslCertExpiry == null
                     ? (int?)null
@@ -81,16 +89,16 @@ public class GetDashboardDomainsHandler(
             .Skip((query.Page - 1) * pageSize)
             .Take(pageSize)
             .Select(r => new DashboardDomainRowDto(
-                DomainId:         r.Id,
-                DomainName:       r.DomainName,
+                DomainId:          r.Id,
+                DomainName:        r.DomainName,
                 MonitoringEnabled: r.IsMonitoringEnabled,
-                SecurityScore:    r.LatestScore,
-                RiskLevel:        ClassifyRisk(r.LatestScore),
-                SslDaysRemaining: r.SslDays,
-                SslSeverity:      ClassifySsl(r.SslDays),
-                CriticalFindings: r.CriticalCount,
-                TotalOpenFindings: r.OpenCount,
-                LastScannedAt:    r.LatestScanAt))
+                SecurityScore:     r.LatestScan?.SecurityScore,
+                RiskLevel:         ClassifyRisk(r.LatestScan?.SecurityScore),
+                SslDaysRemaining:  r.SslDays,
+                SslSeverity:       ClassifySsl(r.SslDays),
+                CriticalFindings:  r.LatestScan?.CriticalCount ?? 0,
+                TotalOpenFindings: r.LatestScan?.OpenCount ?? 0,
+                LastScannedAt:     r.LatestScan?.CompletedAt))
             .ToList();
 
         return Result<PagedResult<DashboardDomainRowDto>>.Success(

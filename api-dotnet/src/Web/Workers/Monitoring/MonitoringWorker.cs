@@ -124,7 +124,7 @@ public sealed class MonitoringWorker(
         await settingsRepo.SaveChangesAsync(ct);
 
         logger.LogInformation(
-            "Monitoring complete for {Domain} — next run at {Next:u}",
+            "Monitoring scheduled for {Domain} — next run at {Next:u}",
             domainName, settings.NextScheduledAt);
     }
 

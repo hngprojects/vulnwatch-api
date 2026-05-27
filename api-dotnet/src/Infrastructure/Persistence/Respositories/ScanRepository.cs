@@ -13,7 +13,7 @@ public sealed class ScanRepository(VulnWatchDbContext db)
    public Task<Scan?> FindLatestCompletedByDomain(Guid domainId, CancellationToken ct) =>
         Db.Scans
             .Where(s => s.DomainId == domainId && s.Status == ScanStatus.Completed)
-            .OrderByDescending(s => s.CreatedAt)
+            .OrderByDescending(s => s.CompletedAt ?? s.CreatedAt)
             .FirstOrDefaultAsync(ct);
 
     public Task<Scan?> FindByIdWithFindings(Guid scanId, CancellationToken ct) =>

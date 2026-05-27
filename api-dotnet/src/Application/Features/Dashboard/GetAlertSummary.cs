@@ -3,8 +3,18 @@ using Application.Interfaces;
 using Domain.Common;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using FluentValidation;
 
 namespace Application.Features.Dashboard;
+
+public class GetDashboardAlertsValidator : AbstractValidator<GetDashboardAlertsQuery>
+{
+    public GetDashboardAlertsValidator()
+    {
+        RuleFor(x => x.Limit)
+            .InclusiveBetween(1, 100);
+    }
+}
 
 public record GetDashboardAlertsQuery(int Limit = 10)
     : IRequest<Result<IReadOnlyList<DashboardAlertDto>>>;

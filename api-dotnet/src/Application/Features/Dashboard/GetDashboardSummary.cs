@@ -1,7 +1,6 @@
 using Application.Features.Dashboard.DTOs;
 using Application.Interfaces;
 using Domain.Common;
-using Domain.Entities;
 using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +18,7 @@ public class GetDashboardSummaryHandler(
         GetDashboardSummaryQuery _, CancellationToken ct)
     {
         var userId = currentUser.UserId;
-        var today  = DateTime.UtcNow.Date;
+        var today = DateTime.UtcNow.Date;
 
         // Single projection — all aggregation in one round trip
         var domainData = await db.Domains
@@ -36,38 +35,23 @@ public class GetDashboardSummaryHandler(
                     .Select(s => (bool?)s.MonitoringEnabled)
                     .FirstOrDefault() ?? false,
 
-                LatestScore = d.Scans
+                // Single subquery — replaces four separate LatestScore /
+                // LatestScanId / LatestScanAt / CriticalCount+OpenCount subqueries
+                LatestScan = d.Scans
                     .Where(s => s.Status == ScanStatus.Completed)
                     .OrderByDescending(s => s.CompletedAt)
-                    .Select(s => (int?)s.SecurityScore)
-                    .FirstOrDefault(),
-
-                LatestScanId = d.Scans
-                    .Where(s => s.Status == ScanStatus.Completed)
-                    .OrderByDescending(s => s.CompletedAt)
-                    .Select(s => (Guid?)s.Id)
-                    .FirstOrDefault(),
-
-                LatestScanAt = d.Scans
-                    .Where(s => s.Status == ScanStatus.Completed)
-                    .OrderByDescending(s => s.CompletedAt)
-                    .Select(s => (DateTime?)s.CompletedAt)
-                    .FirstOrDefault(),
-
-                CriticalCount = d.Scans
-                    .Where(s => s.Status == ScanStatus.Completed)
-                    .OrderByDescending(s => s.CompletedAt)
-                    .Take(1)
-                    .SelectMany(s => s.Findings)
-                    .Count(f => f.Status == FindingStatus.Open
-                             && f.Severity == FindingSeverity.Critical),
-
-                OpenCount = d.Scans
-                    .Where(s => s.Status == ScanStatus.Completed)
-                    .OrderByDescending(s => s.CompletedAt)
-                    .Take(1)
-                    .SelectMany(s => s.Findings)
-                    .Count(f => f.Status == FindingStatus.Open)
+                    .Select(s => new
+                    {
+                        s.Id,
+                        s.SecurityScore,
+                        s.CompletedAt,
+                        CriticalCount = s.Findings
+                            .Count(f => f.Status == FindingStatus.Open
+                                     && f.Severity == FindingSeverity.Critical),
+                        OpenCount = s.Findings
+                            .Count(f => f.Status == FindingStatus.Open)
+                    })
+                    .FirstOrDefault()
             })
             .ToListAsync(ct);
 
@@ -78,24 +62,22 @@ public class GetDashboardSummaryHandler(
                      && a.Status == OutboxStatus.Pending)
             .CountAsync(ct);
 
-        // In-memory aggregation
-        var verified   = domainData.Count(d =>
-            d.VerificationStatus == VerificationStatus.Verified);
-        var monitoring = domainData.Count(d => d.IsMonitoringEnabled);
-
         var scores = domainData
-            .Where(d => d.LatestScore.HasValue)
-            .Select(d => d.LatestScore!.Value)
+            .Where(d => d.LatestScan is not null)
+            .Select(d => d.LatestScan!.SecurityScore)
+            .Where(s => s.HasValue)
+            .Select(s => s!.Value)
             .ToList();
 
         var avgScore = scores.Count > 0
             ? (int)Math.Round(scores.Average())
             : (int?)null;
 
-        var overallPosture = ClassifyPosture(avgScore, domainData
-            .Sum(d => d.CriticalCount));
+        var totalCritical = domainData.Sum(d => d.LatestScan?.CriticalCount ?? 0);
 
-        // Most urgent SSL — domain with fewest days left above zero
+        var overallPosture = ClassifyPosture(avgScore, totalCritical);
+
+        // Most urgent SSL — domain with fewest days left at or above zero
         var mostUrgentSsl = domainData
             .Where(d => d.SslCertExpiry.HasValue)
             .Select(d => new
@@ -115,43 +97,42 @@ public class GetDashboardSummaryHandler(
 
         // Most recent scan across all domains
         var mostRecent = domainData
-            .Where(d => d.LatestScanAt.HasValue && d.LatestScanId.HasValue)
-            .OrderByDescending(d => d.LatestScanAt)
+            .Where(d => d.LatestScan is not null && d.LatestScan.CompletedAt.HasValue)
+            .OrderByDescending(d => d.LatestScan!.CompletedAt)
             .Select(d => new LastScanDto(
-                d.LatestScanId!.Value,
+                d.LatestScan!.Id,
                 d.Id,
                 d.DomainName,
-                d.LatestScore,
-                d.LatestScanAt!.Value))
+                d.LatestScan.SecurityScore,
+                d.LatestScan.CompletedAt!.Value))
             .FirstOrDefault();
 
         return Result<DashboardSummaryDto>.Success(new DashboardSummaryDto(
-            TotalDomains:           domainData.Count,
-            VerifiedDomains:        verified,
-            MonitoringActiveDomains: monitoring,
-            OverallPosture:         overallPosture,
-            AvgSecurityScore:       avgScore,
-            TotalCriticalFindings:  domainData.Sum(d => d.CriticalCount),
-            TotalOpenFindings:      domainData.Sum(d => d.OpenCount),
-            SslAlertsActive:        sslAlertCount,
-            MostUrgentSsl:          mostUrgentSsl,
-            MostRecentScan:         mostRecent
-        ));
+            TotalDomains: domainData.Count,
+            VerifiedDomains: domainData.Count(d => d.VerificationStatus == VerificationStatus.Verified),
+            MonitoringActiveDomains: domainData.Count(d => d.IsMonitoringEnabled),
+            OverallPosture: overallPosture,
+            AvgSecurityScore: avgScore,
+            TotalCriticalFindings: totalCritical,
+            TotalOpenFindings: domainData.Sum(d => d.LatestScan?.OpenCount ?? 0),
+            SslAlertsActive: sslAlertCount,
+            MostUrgentSsl: mostUrgentSsl,
+            MostRecentScan: mostRecent));
     }
 
     private static string ClassifyPosture(int? avg, int totalCritical) =>
         totalCritical > 0 ? "at_risk" :
-        avg is null      ? "unscanned" :
-        avg >= 80        ? "safe" :
-        avg >= 60        ? "moderate" :
-                           "at_risk";
+        avg is null ? "unscanned" :
+        avg >= 80 ? "safe" :
+        avg >= 60 ? "moderate" :
+                            "at_risk";
 
     private static SslSeverity ClassifySslSeverity(int days) => days switch
     {
-        <= 0  => SslSeverity.Expired,
-        <= 7  => SslSeverity.Critical,
+        <= 0 => SslSeverity.Expired,
+        <= 7 => SslSeverity.Critical,
         <= 15 => SslSeverity.Urgent,
         <= 30 => SslSeverity.Warning,
-        _     => SslSeverity.Safe
+        _ => SslSeverity.Safe
     };
 }
