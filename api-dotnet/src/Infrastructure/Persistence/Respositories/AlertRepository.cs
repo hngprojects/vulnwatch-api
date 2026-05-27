@@ -10,6 +10,12 @@ namespace Infrastructure.Persistence.Repositories;
 public sealed class AlertRepository(VulnWatchDbContext db)
     : BaseRepository<Alert>(db), IAlertRepository
 {
+    public Task<List<Alert>> GetRecentByDomain(Guid domainId, int limit, CancellationToken ct) =>
+        Db.Alerts
+            .Where(a => a.DomainId == domainId)
+            .OrderByDescending(a => a.CreatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
     public Task<List<Alert>> GetPendingAsync(int batchSize, CancellationToken ct) =>
         Db.Alerts
             .Where(a => a.Status == OutboxStatus.Pending && a.NumRetries < 3)

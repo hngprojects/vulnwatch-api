@@ -107,6 +107,7 @@ public class RegisterDomainHandlerTests
 public class VerifyDomainHandlerTests
 {
     private readonly Mock<IDomainRepository> _domains;
+    private readonly Mock<IDomainSettingsRepository> _domainSettings;
     private readonly Mock<ICurrentUser> _currentUser;
     private readonly Mock<IDnsResolver> _dnsResolver;
     private readonly Mock<ILogger<VerifyDomainHandler>> _logger;
@@ -122,11 +123,12 @@ public class VerifyDomainHandlerTests
             .Build();
  
     private VerifyDomainHandler BuildSut(bool dnsLookup = false) =>
-        new(_domains.Object, _currentUser.Object, _dnsResolver.Object, _logger.Object, BuildConfig(dnsLookup));
+        new(_domains.Object, _domainSettings.Object, _currentUser.Object, _dnsResolver.Object, _logger.Object, BuildConfig(dnsLookup));
  
     public VerifyDomainHandlerTests()
     {
         _domains = new Mock<IDomainRepository>();
+        _domainSettings = new Mock<IDomainSettingsRepository>();
         _currentUser = new Mock<ICurrentUser>();
         _dnsResolver = new Mock<IDnsResolver>();
         _logger = new Mock<ILogger<VerifyDomainHandler>>();

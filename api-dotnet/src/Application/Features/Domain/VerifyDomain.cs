@@ -7,6 +7,7 @@ using Domain.Enums;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Domain.Entities;
 
 
 namespace Application.Features.Domain;
@@ -15,6 +16,7 @@ public record VerifyDomainCommand(Guid DomainId) : IRequest<Result<VerifyDomainR
 
 public class VerifyDomainHandler(
     IDomainRepository domains,
+    IDomainSettingsRepository monitoringSettings,
     ICurrentUser currentUser,
     IDnsResolver dnsResolver,
     ILogger<VerifyDomainHandler> logger,
@@ -71,6 +73,15 @@ public class VerifyDomainHandler(
         }
 
         record.Verify();
+        var alreadyHasSettings = await monitoringSettings
+            .ExistsForDomain(cmd.DomainId, ct);
+
+        if (!alreadyHasSettings)
+        {
+            var defaults = DomainSettings.CreateDefault(cmd.DomainId);
+            await monitoringSettings.AddAsync(defaults, ct);
+        }
+
         await domains.SaveChangesAsync(ct);
 
         return Result<VerifyDomainResponse>.Success(
