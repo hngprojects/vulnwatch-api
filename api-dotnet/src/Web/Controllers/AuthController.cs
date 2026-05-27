@@ -35,6 +35,7 @@ public class AuthController : ControllerBase
     /// <summary>Verifies a user's email using a verification token.</summary>
     /// <param name="userId">User identifier.</param>
     /// <param name="token">Verification token sent to user email.</param>
+    /// <param name="ct">Cancellation token.</param>
     /// <response code="200">Email successfully verified.</response>
     /// <response code="400">Invalid or expired token.</response>
     [HttpGet("verify")]
@@ -71,6 +72,7 @@ public class AuthController : ControllerBase
 
     /// <summary>Refreshes an expired access token using a refresh token.</summary>
     /// <param name="request">Refresh token request payload.</param>
+    /// <param name="ct">Cancellation token.</param>
     /// <response code="200">New authentication tokens returned.</response>
     /// <response code="401">Invalid or expired refresh token.</response>
     [HttpPost("refresh-token")]
