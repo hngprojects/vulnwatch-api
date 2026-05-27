@@ -4,6 +4,7 @@ import com.vulnwatch.worker.enums.SurfaceType;
 import com.vulnwatch.worker.model.EngineResult;
 import com.vulnwatch.worker.model.ScanJob;
 import com.vulnwatch.worker.model.payload.SslPayload;
+import org.springframework.stereotype.Component;
 
 import javax.net.ssl.*;
 import java.net.InetSocketAddress;
@@ -13,6 +14,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
+@Component
 public class SslEngine implements Scanner {
 
     private static final int TIMEOUT_MS = 10_000;
