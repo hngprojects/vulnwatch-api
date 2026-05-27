@@ -24,6 +24,8 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
     public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
     public DbSet<WebHookOutBox> WebHookOutBox => Set<WebHookOutBox>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<DomainSettings> DomainSettings =>
+    Set<DomainSettings>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -76,6 +78,35 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
             e.HasIndex(d => new { d.VerificationStatus, d.SslCertExpiry })
                 .HasFilter("\"VerificationStatus\" = 'Verified' AND \"SslCertExpiry\" IS NOT NULL")
                 .HasDatabaseName("IX_ScannedDomains_Verified_SslCertExpiry");
+        });
+
+        builder.Entity<DomainSettings>(e =>
+        {
+            e.HasKey(s => s.Id);
+
+            e.Property(s => s.ScanFrequency).HasConversion<string>();
+            e.Property(s => s.NotificationChannel).HasConversion<int>();
+
+            // Store thresholds as a plain string column — no JSON needed
+            e.Property(s => s.SslAlertThresholds)
+                .HasColumnName("SslAlertThresholds")
+                .HasMaxLength(50)
+                .IsRequired();
+
+            e.HasOne(s => s.Domain)
+                .WithOne()
+                .HasForeignKey<DomainSettings>(s => s.DomainId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // One settings row per domain — enforced at DB level
+            e.HasIndex(s => s.DomainId)
+                .IsUnique()
+                .HasDatabaseName("IX_DomainSettings_DomainId");
+
+            // Worker query — find everything due for scanning
+            e.HasIndex(s => new { s.MonitoringEnabled, s.NextScheduledAt })
+                .HasDatabaseName("IX_DomainSettings_DueForScan")
+                .HasFilter("\"MonitoringEnabled\" = true");
         });
 
         builder.Entity<Scan>(e =>
