@@ -16,7 +16,7 @@ public sealed class ScanDispatchService(
         DomainSettings settings,
         CancellationToken ct)
     {
-        var domainId   = settings.DomainId;
+        var domainId = settings.DomainId;
         var domainName = settings.Domain.DomainName;
 
         // Guard — never queue if a scan is already in flight
@@ -32,24 +32,40 @@ public sealed class ScanDispatchService(
         var idempotencyKey = Guid.NewGuid();
 
         var scan = Domain.Entities.Scan.Create(
-            userId:         settings.Domain.UserId,
+            userId: settings.Domain.UserId,
             idempotencyKey: idempotencyKey,
-            targetType:     ScanTargetType.Domain,
-            coverage:       ScanCoverage.Full,
-            surfaceTypes:   SurfaceType.Dns | SurfaceType.Ssl | SurfaceType.Http,
-            domainId:       domainId);
+            targetType: ScanTargetType.Domain,
+            coverage: ScanCoverage.Full,
+            surfaceTypes: SurfaceType.Dns | SurfaceType.Ssl | SurfaceType.Http,
+            domainId: domainId);
 
         await scanRepo.AddAsync(scan, ct);
         await scanRepo.SaveChangesAsync(ct);
 
-        await redis.PublishScanJob("scan-jobs", new ScanJob(
-            domainId,
-            domainName,
-            scan.Id,
-            ScanTargetType.Domain.ToString(),
-            scan.SurfaceTypes.ToString(),
-            settings.Domain.UserId,
-            scan.CreatedAt), ct);
+        try
+        {
+            await redis.PublishScanJob("scan-jobs", new ScanJob(
+                domainId,
+                domainName,
+                scan.Id,
+                ScanTargetType.Domain.ToString(),
+                scan.SurfaceTypes.ToString(),
+                settings.Domain.UserId,
+                scan.CreatedAt), ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Failed to publish scan job for {Domain} (scan {ScanId}) — marking as Failed",
+                domainName, scan.Id);
+
+            // Compensation: prevent the persisted record from blocking future dispatches.
+            // FindRunningByDomain would otherwise match this scan forever.
+            scan.Fail();
+            await scanRepo.SaveChangesAsync(ct);
+
+            return false;
+        }
 
         logger.LogInformation(
             "Monitoring scan dispatched for {Domain} — scan {ScanId}",

@@ -39,18 +39,14 @@ public sealed class MonitoringWorker(
 
     private async Task RunTickAsync(CancellationToken ct)
     {
-        using var scope = scopeFactory.CreateScope();
-
-        var settingsRepo = scope.ServiceProvider
-            .GetRequiredService<IDomainSettingsRepository>();
-        var scanDispatch = scope.ServiceProvider
-            .GetRequiredService<ScanDispatchService>();
-        var sslCheck = scope.ServiceProvider
-            .GetRequiredService<SslExpiryCheckService>();
-        var ownershipCheck = scope.ServiceProvider
-            .GetRequiredService<OwnershipCheckService>();
-
-        var due = await settingsRepo.GetDueForScan(DateTime.UtcNow, ct);
+        // Resolve only the repository here — it's just a DB read, single scope is fine
+        List<Domain.Entities.DomainSettings> due;
+        using (var fetchScope = scopeFactory.CreateScope())
+        {
+            var settingsRepo = fetchScope.ServiceProvider
+                .GetRequiredService<IDomainSettingsRepository>();
+            due = await settingsRepo.GetDueForScan(DateTime.UtcNow, ct);
+        }
 
         if (due.Count == 0)
         {
@@ -62,8 +58,6 @@ public sealed class MonitoringWorker(
             "MonitoringWorker tick — {Count} domain(s) due for monitoring",
             due.Count);
 
-        // Process domains concurrently with a cap to avoid overwhelming Redis
-        // and the DB connection pool
         var semaphore = new SemaphoreSlim(5);
 
         var tasks = due.Select(async settings =>
@@ -71,6 +65,18 @@ public sealed class MonitoringWorker(
             await semaphore.WaitAsync(ct);
             try
             {
+                // Each domain task gets its own isolated scope → its own DbContext
+                using var scope = scopeFactory.CreateScope();
+
+                var settingsRepo = scope.ServiceProvider
+                    .GetRequiredService<IDomainSettingsRepository>();
+                var scanDispatch = scope.ServiceProvider
+                    .GetRequiredService<ScanDispatchService>();
+                var sslCheck = scope.ServiceProvider
+                    .GetRequiredService<SslExpiryCheckService>();
+                var ownershipCheck = scope.ServiceProvider
+                    .GetRequiredService<OwnershipCheckService>();
+
                 await ProcessDomainAsync(
                     settings, scanDispatch, sslCheck, ownershipCheck,
                     settingsRepo, ct);

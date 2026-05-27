@@ -8,6 +8,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 
 
 namespace Application.Features.Domain;
@@ -73,13 +74,19 @@ public class VerifyDomainHandler(
         }
 
         record.Verify();
-        var alreadyHasSettings = await monitoringSettings
-            .ExistsForDomain(cmd.DomainId, ct);
-
-        if (!alreadyHasSettings)
+        try
         {
             var defaults = DomainSettings.CreateDefault(cmd.DomainId);
             await monitoringSettings.AddAsync(defaults, ct);
+        }
+        catch (Exception ex) when (ex is DbUpdateException || ex is DbUpdateConcurrencyException)
+        {
+            logger.LogWarning(
+                "DomainSettings already exist for domain {DomainId} — likely created by a concurrent verification request. Exception: {Exception}",
+                cmd.DomainId, ex);
+        
+            // unique constraint violation 
+            // Ignore: settings were created by a concurrent request.  
         }
 
         await domains.SaveChangesAsync(ct);
