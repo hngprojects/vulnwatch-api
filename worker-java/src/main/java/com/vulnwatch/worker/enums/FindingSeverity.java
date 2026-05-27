@@ -24,6 +24,10 @@ public enum FindingSeverity {
 
     private final String name;
 
+    public boolean isAtLeast(FindingSeverity other){
+        return this.ordinal()<=other.ordinal();
+    }
+
     FindingSeverity(String name) {
         this.name = name;
     }
