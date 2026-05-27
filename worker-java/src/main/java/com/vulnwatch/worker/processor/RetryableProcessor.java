@@ -25,8 +25,7 @@ public class RetryableProcessor implements JobProcessor {
     private final JobProcessor delegate;
     private final JedisPooled jedis;
 
-    @Value("${worker.dlq.key:dead-letter}")
-    private String dlqKey;
+    private final String dlqKey;
     private final ObjectMapper mapper;
 
     @Override
