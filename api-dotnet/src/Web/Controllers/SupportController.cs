@@ -11,7 +11,6 @@ using Web.Extensions;
 namespace Web.Controllers;
 
 [EnableRateLimiting(RateLimitExtensions.GeneralPolicy)]
-
 [ApiController]
 [Route("api/[controller]")]
 public class SupportController : ControllerBase
@@ -20,10 +19,25 @@ public class SupportController : ControllerBase
 
     public SupportController(IMediator mediator) => _mediator = mediator;
 
+    /// <summary>
+    /// Submits a support or contact request.
+    /// </summary>
+    /// <param name="request">
+    /// Contact form payload including user details and message content.
+    /// </param>
+    /// <response code="200">Support request successfully submitted.</response>
+    /// <response code="400">Invalid request payload.</response>
     [HttpPost]
     public async Task<ActionResult<Result<ContactUsResponse>>> ContactUs(ContactUsRequest request)
     {
-        var result = await _mediator.Send(new ContactUsCommand(request.Name, request.Email, request.PhoneNumber, request.RequestType, request.Content));
+        var result = await _mediator.Send(
+            new ContactUsCommand(
+                request.Name,
+                request.Email,
+                request.PhoneNumber,
+                request.RequestType,
+                request.Content));
+
         return result.ToHttpResponse(this);
     }
 }

@@ -10,8 +10,8 @@ using Microsoft.AspNetCore.RateLimiting;
 using Web.Extensions;
 
 namespace Web.Controllers;
-[EnableRateLimiting(RateLimitExtensions.GeneralPolicy)]
 
+[EnableRateLimiting(RateLimitExtensions.GeneralPolicy)]
 [ApiController]
 [Route("api/[controller]")]
 public class DomainsController : ControllerBase
@@ -20,6 +20,13 @@ public class DomainsController : ControllerBase
 
     public DomainsController(IMediator mediator) => _mediator = mediator;
 
+    /// <summary>
+    /// Registers a new domain for the authenticated user.
+    /// </summary>
+    /// <param name="request">Domain registration payload.</param>
+    /// <response code="200">Domain successfully registered.</response>
+    /// <response code="400">Invalid domain or validation error.</response>
+    /// <response code="401">User is not authenticated.</response>
     [HttpPost]
     [Authorize]
     public async Task<ActionResult<Result<RegisterDomainResponse>>> Register(RegisterDomainRequest request)
@@ -28,8 +35,16 @@ public class DomainsController : ControllerBase
         return result.ToHttpResponse(this);
     }
 
-    [Authorize]
+    /// <summary>
+    /// Resends the verification token for a previously registered domain.
+    /// </summary>
+    /// <param name="request">Domain for which to resend verification token.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">Verification token resent successfully.</response>
+    /// <response code="400">Invalid domain or request.</response>
+    /// <response code="401">User is not authenticated.</response>
     [HttpPost("ResendToken")]
+    [Authorize]
     public async Task<ActionResult<Result<RegisterDomainResponse>>> ResendToken(
         RegisterDomainRequest request,
         CancellationToken ct)
@@ -38,9 +53,16 @@ public class DomainsController : ControllerBase
         return result.ToHttpResponse(this);
     }
 
-
-    [Authorize]
+    /// <summary>
+    /// Verifies ownership of a domain using its unique identifier.
+    /// </summary>
+    /// <param name="id">Domain identifier (GUID).</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">Domain successfully verified.</response>
+    /// <response code="400">Verification failed or domain not found.</response>
+    /// <response code="401">User is not authenticated.</response>
     [HttpPut("{id:guid}/Verify")]
+    [Authorize]
     public async Task<ActionResult<Result<VerifyDomainResponse>>> Verify(
         Guid id,
         CancellationToken ct)
@@ -49,33 +71,65 @@ public class DomainsController : ControllerBase
         return result.ToHttpResponse(this);
     }
 
+    /// <summary>
+    /// Retrieves paginated list of domains belonging to the authenticated user.
+    /// Supports search, filtering, sorting, and pagination.
+    /// </summary>
+    /// <param name="request">Query parameters for filtering and pagination.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">Returns paginated list of domains.</response>
+    /// <response code="401">User is not authenticated.</response>
     [HttpGet]
     [Authorize]
-    public async Task<ActionResult<Result<PagedResult<DomainSummary>>>> GetUserDomains([FromQuery] GetDomainsRequest request, CancellationToken ct)
+    public async Task<ActionResult<Result<PagedResult<DomainSummary>>>> GetUserDomains(
+        [FromQuery] GetDomainsRequest request,
+        CancellationToken ct)
     {
-
-        var query = new GetDomainsQuery(request.Search, request.Status,
-                                        request.SortBy, request.Order, request.Page, request.PageSize);
+        var query = new GetDomainsQuery(
+            request.Search,
+            request.Status,
+            request.SortBy,
+            request.Order,
+            request.Page,
+            request.PageSize);
 
         var result = await _mediator.Send(query, ct);
         return result.ToHttpResponse(this);
-
     }
 
+    /// <summary>
+    /// Retrieves a single domain by its unique identifier.
+    /// </summary>
+    /// <param name="domainId">Domain identifier (GUID).</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">Returns domain details.</response>
+    /// <response code="404">Domain not found.</response>
+    /// <response code="401">User is not authenticated.</response>
     [HttpGet("{domainId:guid}")]
     [Authorize]
-    public async Task<ActionResult<Result<DomainSummary>>> GetSingleDomain(Guid domainId, CancellationToken ct)
+    public async Task<ActionResult<Result<DomainSummary>>> GetSingleDomain(
+        Guid domainId,
+        CancellationToken ct)
     {
         var result = await _mediator.Send(new GetDomainByIdQuery(domainId), ct);
         return result.ToHttpResponse(this);
     }
 
+    /// <summary>
+    /// Deletes a domain owned by the authenticated user.
+    /// </summary>
+    /// <param name="domainId">Domain identifier (GUID).</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">Domain successfully deleted.</response>
+    /// <response code="404">Domain not found.</response>
+    /// <response code="401">User is not authenticated.</response>
     [HttpDelete("{domainId:guid}")]
     [Authorize]
-    public async Task<ActionResult<Result<MessageResponse>>> DeleteDomain(Guid domainId, CancellationToken ct)
+    public async Task<ActionResult<Result<MessageResponse>>> DeleteDomain(
+        Guid domainId,
+        CancellationToken ct)
     {
         var result = await _mediator.Send(new DeleteDomainCommand(domainId), ct);
         return result.ToHttpResponse(this);
     }
-
 }
