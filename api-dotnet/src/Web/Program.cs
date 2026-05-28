@@ -7,6 +7,7 @@ using Infrastructure.Persistence;
 using Infrastructure.Persistence.Repositories;
 using Infrastructure.Redis;
 using Infrastructure.Services;
+using Infrastructure.Services.Chat;
 using Application.Helpers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -236,6 +237,24 @@ builder.Services.AddHostedService<MonitoringWorker>();
 builder.Services.AddHostedService<ScanReaperWorker>();
 builder.Services.AddScoped<INotificationPreferencesRepository, NotificationPreferencesRepository>();
 builder.Services.AddScoped<IDomainSettingsRepository, DomainSettingsRepository>();
+builder.Services.AddHttpClient("anthropic");  // base URL set per-request in the service
+builder.Services.AddHttpClient("gemini");     // base URL set per-request in the service
+builder.Services
+        .AddHttpClient("openai", client =>
+        {
+            // Works for both OpenAI and Groq — base URL differs by key config
+            var baseUrl = builder.Configuration["Chat:OpenAi:BaseUrl"] ?? "https://api.openai.com";
+            var apiKey  = builder.Configuration["Chat:OpenAi:ApiKey"] ?? "";
+
+            client.BaseAddress = new Uri(baseUrl);
+            client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+        });
+builder.Services.AddScoped<AnthropicChatService>();
+builder.Services.AddScoped<GeminiChatService>();
+builder.Services.AddScoped<OpenAiChatService>();
+builder.Services.AddScoped<IChatServiceFactory, ChatServiceFactory>();
+builder.Services.AddScoped<IChatService>(sp =>
+        sp.GetRequiredService<IChatServiceFactory>().Resolve());
 
 var corsSettings = builder.Configuration
     .GetSection("Cors")
