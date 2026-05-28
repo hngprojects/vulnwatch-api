@@ -1,9 +1,12 @@
+using System.Text.Json;
 using Application.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Infrastructure.Persistence;
 
@@ -160,12 +163,29 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
         builder.Entity<Integration>(e =>
         {
             e.Property(i => i.Status).HasConversion<string>();
+            e.Property(i => i.Provider).HasConversion<string>();
             e.HasOne(i => i.User)
              .WithMany()
              .HasForeignKey(i => i.UserId)
              .OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(i => new { i.UserId, i.Status })
              .HasDatabaseName("IX_Integrations_UserId_Status");
+
+            var converter = new ValueConverter<Dictionary<string, string>, string>(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                v => JsonSerializer.Deserialize<Dictionary<string, string>>(v, (JsonSerializerOptions?)null)!);
+
+            var comparer = new ValueComparer<Dictionary<string, string>>(
+                (a, b) => JsonSerializer.Serialize(a, (JsonSerializerOptions?)null) ==
+                           JsonSerializer.Serialize(b, (JsonSerializerOptions?)null),
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null).GetHashCode(),
+                v => JsonSerializer.Deserialize<Dictionary<string, string>>(
+                         JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                         (JsonSerializerOptions?)null)!);
+
+            e.Property(x => x.Metadata)
+                .HasColumnType("jsonb")
+                .HasConversion(converter, comparer);
         });
 
         builder.Entity<MonitoredRepository>(e =>
@@ -201,20 +221,15 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
 
         builder.Entity<Alert>(e =>
         {
-            e.HasIndex(a => new { a.UserId, a.Type, a.DomainId, a.DeduplicationKey })
-            .IsUnique()
-            .HasDatabaseName("IX_Alerts_Deduplication");
+            e.HasIndex(a => new { a.UserId, a.Type, a.DomainId, a.Channel, a.DeduplicationKey })
+                .IsUnique()
+                .HasDatabaseName("IX_Alerts_Deduplication");
 
-            e.Property(a => a.Status)
-            .HasConversion<string>();
-        
-            e.HasIndex(a => new { a.UserId, a.Type, a.DomainId, a.DeduplicationKey })
-            .IsUnique()
-            .HasDatabaseName("IX_Alerts_Deduplication");
-        
+            e.Property(a => a.Status).HasConversion<string>();
+
             e.HasIndex(a => new { a.UserId, a.CreatedAt })
             .HasDatabaseName("IX_Alerts_UserId_CreatedAt");
-        
+
             e.HasIndex(a => new { a.Channel, a.CreatedAt })
             .HasFilter("\"Status\" = 'Pending'")
             .HasDatabaseName("IX_Alerts_Pending_Channel_CreatedAt");
