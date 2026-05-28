@@ -1,3 +1,4 @@
+using Application.Features.Alerts.ScanCompleted;
 using Application.Features.Alerts.SslExpiry;
 using Application.Interfaces;
 using Domain.Entities;
@@ -110,15 +111,17 @@ public class AlertDispatcher
                 continue;
             }
 
-            var alert = Alert.Create(
-                userId: e.UserId,
-                type: AlertType.ScanCompleted,
-                channel: channel,
-                severity: severity,
-                deduplicationKey: deduplicationKey,
-                subject: subject,
-                body: body,
-                domainId: e.DomainId);
+            var alert = ScanCompletedAlertFactory.Create(e, channel);
+
+            // var alert = Alert.Create(
+            //     userId: e.UserId,
+            //     type: AlertType.ScanCompleted,
+            //     channel: channel,
+            //     severity: severity,
+            //     deduplicationKey: deduplicationKey,
+            //     subject: subject,
+            //     body: body,
+            //     domainId: e.DomainId);
 
             await _alerts.AddAsync(alert, ct);
             await _alerts.SaveChangesAsync(ct);
