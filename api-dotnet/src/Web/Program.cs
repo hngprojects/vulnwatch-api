@@ -236,6 +236,8 @@ builder.Services.AddHostedService<MonitoringWorker>();
 builder.Services.AddHostedService<ScanReaperWorker>();
 builder.Services.AddScoped<INotificationPreferencesRepository, NotificationPreferencesRepository>();
 builder.Services.AddScoped<IDomainSettingsRepository, DomainSettingsRepository>();
+builder.Services.AddScoped<ISlackOAuthService, SlackOAuthService>();
+builder.Services.AddScoped<IIntegrationRepository, IntegrationRepository>();
 
 var corsSettings = builder.Configuration
     .GetSection("Cors")

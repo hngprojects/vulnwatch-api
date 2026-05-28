@@ -5,7 +5,7 @@ namespace Domain.Entities;
 public class Integration : EntityBase
 {
     public Guid UserId { get; private set; }
-    public string Provider { get; private set; } = default!;
+    public IntegrationProvider Provider { get; private set; } = default!;
     public string InstallationId { get; private set; } = default!;
     public IntegrationStatus Status { get; private set; }
 
@@ -13,7 +13,7 @@ public class Integration : EntityBase
 
     private Integration() { }
 
-    public static Integration Create(Guid userId, string provider, string installationId)
+    public static Integration Create(Guid userId, IntegrationProvider provider, string installationId)
         => new()
         {
             UserId = userId,
@@ -31,6 +31,12 @@ public class Integration : EntityBase
     public void Deactivate()
     {
         Status = IntegrationStatus.INACTIVE;
+        Touch();
+    }
+
+    public void UpdateInstallation(string installationId)
+    {
+        InstallationId = installationId;
         Touch();
     }
 }

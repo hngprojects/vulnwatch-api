@@ -57,6 +57,11 @@ public interface IDomainSettingsRepository
     Task<bool> ExistsForDomain(Guid domainId, CancellationToken ct);
 }
 
+public interface IIntegrationRepository : IRepository<Integration>
+{
+    Task<Integration?> GetByUserAndProvider(Guid userId, IntegrationProvider provider, CancellationToken ct);
+}
+
 public interface INotificationPreferencesRepository : IRepository<NotificationPreferences>
 {
     Task<bool> ExistsForUser(Guid userId, CancellationToken ct);

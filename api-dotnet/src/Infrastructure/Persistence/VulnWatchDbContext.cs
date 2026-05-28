@@ -160,6 +160,7 @@ public class VulnWatchDbContext : IdentityDbContext<User, IdentityRole<Guid>, Gu
         builder.Entity<Integration>(e =>
         {
             e.Property(i => i.Status).HasConversion<string>();
+            e.Property(x => x.Provider).HasConversion<string>();
             e.HasOne(i => i.User)
              .WithMany()
              .HasForeignKey(i => i.UserId)
