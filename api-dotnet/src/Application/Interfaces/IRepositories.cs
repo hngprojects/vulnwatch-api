@@ -15,10 +15,14 @@ public interface IRepository<T> where T : class
 
 public interface IAlertRepository : IRepository<Alert>
 {
+    Task<List<Alert>> GetPendingByUser(Guid userId, int batchSize, CancellationToken ct);
     Task<List<Alert>> GetRecentByDomain(Guid domainId, int limit, CancellationToken ct);
     Task<List<Alert>> GetPendingAsync(int batchSize, CancellationToken ct);
     Task<bool> HasRecentAlert(Guid userId, AlertType type, Guid? domainId,
         TimeSpan window, CancellationToken ct);
+    Task<bool> ExistsForToday(
+        Guid userId, AlertType type, Guid? domainId,
+        AlertChannel channel, string deduplicationKey, CancellationToken ct);
     void DetachUnsavedAlerts();
 }
 
@@ -55,6 +59,11 @@ public interface IDomainSettingsRepository
         DateTime asOf, CancellationToken ct);
 
     Task<bool> ExistsForDomain(Guid domainId, CancellationToken ct);
+}
+
+public interface IIntegrationRepository : IRepository<Integration>
+{
+    Task<Integration?> GetByUserAndProvider(Guid userId, IntegrationProvider provider, CancellationToken ct);
 }
 
 public interface INotificationPreferencesRepository : IRepository<NotificationPreferences>
