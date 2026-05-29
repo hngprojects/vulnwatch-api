@@ -70,7 +70,7 @@ public class IntegrationsController(IMediator mediator, IConfiguration config)
 
         if (!string.IsNullOrWhiteSpace(error))
             return Redirect(
-                $"{frontendBase}?slack=denied&reason={error}");
+                $"{frontendBase}?slack=denied&reason={Uri.EscapeDataString(error)}");
 
         if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(state))
             return Redirect(
