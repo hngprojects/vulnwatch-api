@@ -38,8 +38,6 @@ public class ChatController(IMediator mediator, ILogger<ChatController> logger) 
         return result.ToHttpResponse(this);
     }
 
-    // Web/Controllers/ChatController.cs  — add alongside your existing endpoints
-
     /// <summary>
     /// Streams a chat response as Server-Sent Events.
     /// Clients should connect with Accept: text/event-stream.
@@ -88,14 +86,12 @@ public class ChatController(IMediator mediator, ILogger<ChatController> logger) 
 
     /// <summary>End and clean up a chat session.</summary>
     [HttpDelete("sessions/{sessionId:guid}")]
-    public async Task<ActionResult<Result<ChatMessageResponse>>> EndSession(
+    public async Task<ActionResult<Result<Unit>>> EndSession(
         Guid sessionId,
-        [FromServices] Application.Interfaces.IRedisService store,
         CancellationToken ct)
     {
-        await store.DeleteChatSession(sessionId, ct);
-        return Ok(Result<ChatMessageResponse>.Success(
-            // ChatMessageResponse.Create(sessionId, "system", "Session ended.")));
-            ChatMessageResponse.Create(sessionId, ChatMessageRole.User, "Session ended.")));
+        var result = await mediator.Send(new EndChatSessionCommand(sessionId), ct);
+        return result.ToHttpResponse(this);
+
     }
 }

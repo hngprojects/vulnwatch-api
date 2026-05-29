@@ -25,7 +25,11 @@ public class StreamChatMessageHandler(
         StreamChatMessageCommand cmd,
         [EnumeratorCancellation] CancellationToken ct)
     {
-        // ── Validate ──────────────────────────────────────────────────────────
+        if (string.IsNullOrWhiteSpace(cmd.Message))
+        {
+            yield return BuildErrorEvent("Message cannot be empty.");
+            yield break;
+        }
 
         var session = await sessionStore.GetChatSession(cmd.SessionId, ct);
         if (session is null)
@@ -54,10 +58,8 @@ public class StreamChatMessageHandler(
         var systemPrompt = ScanReportPromptBuilder.Build(scan, domain);
 
         var history = session.History
-            .Select(t => (t.Role, t.Content))
+            .Append(new ChatTurn(ChatMessageRole.User, cmd.Message))
             .ToList();
-
-        history.Add((ChatMessageRole.User, cmd.Message));
 
         // ── Stream and accumulate ─────────────────────────────────────────────
 
@@ -81,5 +83,5 @@ public class StreamChatMessageHandler(
     }
 
     private static string BuildErrorEvent(string message)
-        => $"data: {{\"error\":\"{message}\"}}\n\n";
+        => System.Text.Json.JsonSerializer.Serialize(new { error = message });
 }

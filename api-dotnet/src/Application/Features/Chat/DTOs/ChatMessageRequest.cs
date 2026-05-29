@@ -20,6 +20,6 @@ public record ChatMessageResponse(
 public record ChatSession(
     Guid SessionId,
     Guid ScanId,
-    List<ChatTurn> History);
+    IReadOnlyList<ChatTurn> History);
 
 public record ChatTurn(ChatMessageRole Role, string Content);

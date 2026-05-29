@@ -1,3 +1,4 @@
+using Application.Features.Chat.DTOs;
 using Domain.Enums;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -24,16 +25,16 @@ public sealed class GeminiChatService : ChatServiceBase
         IConfiguration config,
         ILogger<GeminiChatService> logger)
     {
-        _http   = factory.CreateClient("gemini");
+        _http = factory.CreateClient("gemini");
         _apiKey = config["Chat:Gemini:ApiKey"]
                   ?? throw new InvalidOperationException("Chat:Gemini:ApiKey not configured.");
-        _model  = config["Chat:Gemini:Model"] ?? "gemini-2.0-flash";
+        _model = config["Chat:Gemini:Model"] ?? "gemini-2.0-flash";
         _logger = logger;
     }
 
     protected override HttpRequestMessage BuildRequest(
         string systemPrompt,
-        List<(ChatMessageRole Role, string Content)> history,
+        IReadOnlyList<ChatTurn> history,
         bool stream)
     {
         // Gemini separates the system prompt from the conversation turns
@@ -41,7 +42,7 @@ public sealed class GeminiChatService : ChatServiceBase
         var contents = history
             .Select(t => new
             {
-                role  = GeminiRole(t.Role),
+                role = GeminiRole(t.Role),
                 parts = new[] { new { text = t.Content } }
             })
             .ToList();
@@ -56,15 +57,16 @@ public sealed class GeminiChatService : ChatServiceBase
             generationConfig = new { maxOutputTokens = 1024 }
         };
 
-        // stream=true uses a different endpoint suffix
         var endpoint = stream
-            ? $"https://generativelanguage.googleapis.com/v1beta/models/{_model}:streamGenerateContent?alt=sse&key={_apiKey}"
-            : $"https://generativelanguage.googleapis.com/v1beta/models/{_model}:generateContent?key={_apiKey}";
+            ? $"https://generativelanguage.googleapis.com/v1beta/models/{_model}:streamGenerateContent?alt=sse"
+            : $"https://generativelanguage.googleapis.com/v1beta/models/{_model}:generateContent";
 
-        return new HttpRequestMessage(HttpMethod.Post, endpoint)
+        var req = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
             Content = JsonContent.Create(payload)
         };
+        req.Headers.Add("x-goog-api-key", _apiKey);
+        return req;
     }
 
     protected override string? ParseSseChunk(JsonElement root)
@@ -88,8 +90,8 @@ public sealed class GeminiChatService : ChatServiceBase
 
     private static string GeminiRole(ChatMessageRole role) => role switch
     {
-        ChatMessageRole.User      => "user",
+        ChatMessageRole.User => "user",
         ChatMessageRole.Assistant => "model",   // Gemini uses "model" not "assistant"
-        _                         => "user"
+        _ => "user"
     };
 }

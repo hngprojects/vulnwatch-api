@@ -61,6 +61,7 @@ public class RedisService : IRedisService
     }
 
     private static string Key(Guid sessionId) => $"chat-session:{sessionId}";
+    
     public async Task SaveSlackState(string state, Guid userId, CancellationToken ct)
     {
         var db = _redis.GetDatabase();

@@ -9,49 +9,57 @@ public sealed class MonitoringWorker(
     IServiceScopeFactory scopeFactory,
     ILogger<MonitoringWorker> logger) : BackgroundService
 {
-    // How often the worker wakes up to check for due domains
-    // Short interval is fine — GetDueForScan uses a filtered index
-    private static readonly TimeSpan TickInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan IdleInterval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan BusyInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan MinInterval  = TimeSpan.FromSeconds(15);
+    private const int BatchSize = 20; // tune to your expected concurrent domain volume
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         logger.LogInformation("MonitoringWorker started");
 
-        // Stagger startup by 30s so the app is fully initialised
         await Task.Delay(TimeSpan.FromSeconds(30), ct);
 
         while (!ct.IsCancellationRequested)
         {
+            int processed = 0;
             try
             {
-                await RunTickAsync(ct);
+                processed = await RunTickAsync(ct);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 logger.LogError(ex, "MonitoringWorker tick failed");
             }
 
-            await Task.Delay(TickInterval, ct);
+            var delay = processed == 0        ? IdleInterval
+                      : processed >= BatchSize ? MinInterval   // batch was full — likely more queued
+                      :                          BusyInterval;
+
+            logger.LogDebug(
+                "MonitoringWorker processed {Count} domain(s) — next tick in {Delay}",
+                processed, delay);
+
+            await Task.Delay(delay, ct);
         }
 
         logger.LogInformation("MonitoringWorker stopped");
     }
 
-    private async Task RunTickAsync(CancellationToken ct)
+    private async Task<int> RunTickAsync(CancellationToken ct)
     {
-        // Resolve only the repository here — it's just a DB read, single scope is fine
         List<Domain.Entities.DomainSettings> due;
         using (var fetchScope = scopeFactory.CreateScope())
         {
             var settingsRepo = fetchScope.ServiceProvider
                 .GetRequiredService<IDomainSettingsRepository>();
-            due = await settingsRepo.GetDueForScan(DateTime.UtcNow, ct);
+            due = await settingsRepo.GetDueForScan(DateTime.UtcNow, BatchSize, ct);
         }
 
         if (due.Count == 0)
         {
             logger.LogDebug("MonitoringWorker tick — no domains due");
-            return;
+            return 0;
         }
 
         logger.LogInformation(
@@ -65,17 +73,12 @@ public sealed class MonitoringWorker(
             await semaphore.WaitAsync(ct);
             try
             {
-                // Each domain task gets its own isolated scope → its own DbContext
                 using var scope = scopeFactory.CreateScope();
 
-                var settingsRepo = scope.ServiceProvider
-                    .GetRequiredService<IDomainSettingsRepository>();
-                var scanDispatch = scope.ServiceProvider
-                    .GetRequiredService<ScanDispatchService>();
-                var sslCheck = scope.ServiceProvider
-                    .GetRequiredService<SslExpiryCheckService>();
-                var ownershipCheck = scope.ServiceProvider
-                    .GetRequiredService<OwnershipCheckService>();
+                var settingsRepo  = scope.ServiceProvider.GetRequiredService<IDomainSettingsRepository>();
+                var scanDispatch  = scope.ServiceProvider.GetRequiredService<ScanDispatchService>();
+                var sslCheck      = scope.ServiceProvider.GetRequiredService<SslExpiryCheckService>();
+                var ownershipCheck = scope.ServiceProvider.GetRequiredService<OwnershipCheckService>();
 
                 await ProcessDomainAsync(
                     settings, scanDispatch, sslCheck, ownershipCheck,
@@ -94,6 +97,7 @@ public sealed class MonitoringWorker(
         });
 
         await Task.WhenAll(tasks);
+        return due.Count;
     }
 
     private async Task ProcessDomainAsync(

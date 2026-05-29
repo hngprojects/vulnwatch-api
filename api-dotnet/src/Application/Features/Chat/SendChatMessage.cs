@@ -39,16 +39,19 @@ public class SendChatMessageHandler(
         if (scan is null || scan.UserId != currentUser.UserId)
             return Result<ChatMessageResponse>.Failure(Error.Forbidden("Access denied."));
 
-        var domain = await domainRepo.GetById(scan.DomainId!.Value, ct);
+        if (scan.Status != ScanStatus.Completed)
+            return Result<ChatMessageResponse>.Failure(
+                Error.Validation("Scan has not completed yet."));
+
+        ScannedDomain? domain = null;
+        if (scan.DomainId.HasValue)
+            domain = await domainRepo.GetById(scan.DomainId.Value, ct);
 
         var systemPrompt = ScanReportPromptBuilder.Build(scan, domain);
 
-        // Append new user message to history before sending
         var updatedHistory = session.History
-            .Select(t => (t.Role, t.Content))
+            .Append(new ChatTurn(ChatMessageRole.User, cmd.Message))
             .ToList();
-
-        updatedHistory.Add((ChatMessageRole.User, cmd.Message));
 
         var reply = await chatService.Chat(systemPrompt, updatedHistory, cmd.Message, ct);
 

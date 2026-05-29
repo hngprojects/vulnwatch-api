@@ -1,3 +1,4 @@
+using Application.Features.Chat.DTOs;
 using Application.Interfaces;
 using Domain.Enums;
 using Microsoft.Extensions.Logging;
@@ -13,7 +14,7 @@ public abstract class ChatServiceBase : IChatService
     // Each provider builds its own request message
     protected abstract HttpRequestMessage BuildRequest(
         string systemPrompt,
-        List<(ChatMessageRole Role, string Content)> history,
+        IReadOnlyList<ChatTurn> history,
         bool stream);
 
     // Each provider knows how to extract text from its own SSE line
@@ -28,7 +29,7 @@ public abstract class ChatServiceBase : IChatService
 
     public async Task<string> Chat(
         string systemPrompt,
-        List<(ChatMessageRole Role, string Content)> history,
+        IReadOnlyList<ChatTurn> history,
         string userMessage,
         CancellationToken ct)
     {
@@ -42,7 +43,7 @@ public abstract class ChatServiceBase : IChatService
 
     public async IAsyncEnumerable<string> Stream(
         string systemPrompt,
-        List<(ChatMessageRole Role, string Content)> history,
+        IReadOnlyList<ChatTurn> history,
         string userMessage,
         [EnumeratorCancellation] CancellationToken ct)
     {
@@ -61,33 +62,36 @@ public abstract class ChatServiceBase : IChatService
             yield break;
         }
 
-        using var httpStream = await response.Content.ReadAsStreamAsync(ct);
-        using var reader = new System.IO.StreamReader(httpStream);
-
-        while (!reader.EndOfStream && !ct.IsCancellationRequested)
+        using (response)
+        using (var httpStream = await response.Content.ReadAsStreamAsync(ct))
+        using (var reader = new System.IO.StreamReader(httpStream))
         {
-            var line = await reader.ReadLineAsync(ct);
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            if (!line.StartsWith("data: ")) continue;
-
-            var data = line["data: ".Length..];
-            if (data == DoneSentinel) yield break;
-
-            string? text = null;
-            try
+            string? line;
+            while ((line = await reader.ReadLineAsync(ct)) is not null)
             {
-                var doc = JsonDocument.Parse(data);
-                text = ParseSseChunk(doc.RootElement);
-            }
-            catch (JsonException ex)
-            {
-                Logger.LogWarning(ex, "[{Provider}] Failed to parse SSE chunk: {Line}",
-                    GetType().Name, line);
-                continue;
-            }
+                if (ct.IsCancellationRequested) yield break;
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (!line.StartsWith("data: ")) continue;
 
-            if (!string.IsNullOrEmpty(text))
-                yield return text;
+                var data = line["data: ".Length..];
+                if (data == DoneSentinel) yield break;
+
+                string? text = null;
+                try
+                {
+                    using var doc = JsonDocument.Parse(data);
+                    text = ParseSseChunk(doc.RootElement);
+                }
+                catch (JsonException ex)
+                {
+                    Logger.LogWarning(ex, "[{Provider}] Failed to parse SSE chunk: {Line}",
+                        GetType().Name, line);
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(text))
+                    yield return text;
+            }
         }
     }
 }

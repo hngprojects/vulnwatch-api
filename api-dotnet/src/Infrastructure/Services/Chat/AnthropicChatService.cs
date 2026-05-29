@@ -1,3 +1,4 @@
+using Application.Features.Chat.DTOs;
 using Domain.Enums;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -31,7 +32,7 @@ public sealed class AnthropicChatService : ChatServiceBase
 
     protected override HttpRequestMessage BuildRequest(
         string systemPrompt,
-        List<(ChatMessageRole Role, string Content)> history,
+        IReadOnlyList<ChatTurn> history,
         bool stream)
     {
         var messages = history

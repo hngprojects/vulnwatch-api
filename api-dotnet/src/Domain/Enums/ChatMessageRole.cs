@@ -5,5 +5,6 @@ namespace Domain.Enums;
 public enum ChatMessageRole
 {
     User,
-    Assistant
+    Assistant,
+    System
 }

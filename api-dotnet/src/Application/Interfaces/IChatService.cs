@@ -1,3 +1,4 @@
+using Application.Features.Chat.DTOs;
 using Domain.Enums;
 
 namespace Application.Interfaces;
@@ -10,13 +11,13 @@ public interface IChatService
 {
     Task<string> Chat(
         string systemPrompt,
-        List<(ChatMessageRole Role, string Content)> history,
+        IReadOnlyList<ChatTurn> history,
         string userMessage,
         CancellationToken ct);
 
     IAsyncEnumerable<string> Stream(
         string systemPrompt,
-        List<(ChatMessageRole Role, string Content)> history,
+        IReadOnlyList<ChatTurn> history,
         string userMessage,
         CancellationToken ct);
 }
