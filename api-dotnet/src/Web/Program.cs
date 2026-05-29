@@ -13,7 +13,6 @@ using Infrastructure.Persistence.Repositories;
 using Infrastructure.Redis;
 using Infrastructure.Services;
 using Infrastructure.Services.Chat;
-using Application.Helpers;
 using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
