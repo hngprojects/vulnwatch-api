@@ -13,6 +13,7 @@ public class RedisService : IRedisService
     private readonly IConnectionMultiplexer _redis;
     private static readonly TimeSpan ChatSessionTtl = TimeSpan.FromHours(2);
 
+    private static readonly TimeSpan SlackStateTtl = TimeSpan.FromMinutes(10);
 
     public RedisService(ILogger<RedisService> logger, IConnectionMultiplexer redis)
     {
@@ -60,5 +61,29 @@ public class RedisService : IRedisService
     }
 
     private static string Key(Guid sessionId) => $"chat-session:{sessionId}";
+    public async Task SaveSlackState(string state, Guid userId, CancellationToken ct)
+    {
+        var db = _redis.GetDatabase();
+        await db.StringSetAsync(
+            SlackStateKey(state),
+            userId.ToString(),
+            SlackStateTtl);
+    }
+
+    public async Task<Guid?> ValidateSlackState(string state, CancellationToken ct)
+    {
+        var db = _redis.GetDatabase();
+        var key = SlackStateKey(state);
+
+        // Atomic get-and-delete — prevents replay attacks
+        var value = await db.StringGetDeleteAsync(key);
+
+        if (value.IsNullOrEmpty)
+            return null;
+
+        return Guid.TryParse(value, out var userId) ? userId : null;
+    }
+
+    private static string SlackStateKey(string state) => $"slack:oauth:state:{state}";
 
 }

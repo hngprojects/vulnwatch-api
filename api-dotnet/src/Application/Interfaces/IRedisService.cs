@@ -10,5 +10,6 @@ public interface IRedisService
     Task SetChatSession(ChatSession session, CancellationToken ct);
     Task<Guid> CreateChatSession(Guid scanId, CancellationToken ct);
     Task DeleteChatSession(Guid sessionId, CancellationToken ct);
+    Task SaveSlackState(string state, Guid userId, CancellationToken ct);
+    Task<Guid?> ValidateSlackState(string state, CancellationToken ct);
 }
-
