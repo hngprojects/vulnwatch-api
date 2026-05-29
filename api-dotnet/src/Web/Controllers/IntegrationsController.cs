@@ -96,6 +96,7 @@ public class IntegrationsController(IMediator mediator, IConfiguration config)
     /// <response code="200">Slack successfully disconnected.</response>
     /// <response code="400">No active Slack connection found.</response>
     /// <response code="401">User is not authenticated.</response>
+    [Authorize]
     [HttpDelete("slack")]
     public async Task<ActionResult<Result<MessageResponse>>> DisconnectSlack(
         CancellationToken ct)
