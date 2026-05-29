@@ -1,11 +1,17 @@
 using System.Security.Cryptography;
 using System.Text;
 using Application.Interfaces;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace Infrastructure.Services;
 
 public class TokenService : ITokenService
 {
+    private readonly IDataProtector _protector;
+    public TokenService(IDataProtectionProvider provider)
+    {
+        _protector = provider.CreateProtector("VulnWatch.Integration.SlackBotToken.v1");
+    }
     public (string RawToken, string TokenHash) Generate()
     {
 
@@ -18,4 +24,8 @@ public class TokenService : ITokenService
 
         return (rawToken, tokenHash);
     }
+
+    public string Protect(string plaintext) => _protector.Protect(plaintext);
+
+    public string Unprotect(string ciphertext) => _protector.Unprotect(ciphertext);
 }
