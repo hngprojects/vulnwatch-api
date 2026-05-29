@@ -15,12 +15,14 @@ public sealed class DomainSettingsRepository(VulnWatchDbContext db)
             .FirstOrDefaultAsync(s => s.DomainId == domainId, ct);
 
     public Task<List<DomainSettings>> GetDueForScan(
-        DateTime asOf, CancellationToken ct) =>
+        DateTime asOf, int limit, CancellationToken ct) =>
         Db.DomainSettings
             .Include(s => s.Domain)
             .Where(s => s.MonitoringEnabled
                      && s.Domain.VerificationStatus == VerificationStatus.Verified
                      && (s.NextScheduledAt == null || s.NextScheduledAt <= asOf))
+            .OrderBy(s => s.NextScheduledAt)
+            .Take(limit)
             .ToListAsync(ct);
 
     public Task<bool> ExistsForDomain(Guid domainId, CancellationToken ct) =>
