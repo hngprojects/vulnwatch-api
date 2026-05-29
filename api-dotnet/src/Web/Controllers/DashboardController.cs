@@ -16,9 +16,12 @@ namespace Web.Controllers;
 public class DashboardController(IMediator mediator) : ControllerBase
 {
     /// <summary>
-    /// Overall Stats
-    /// Call on every dashboard load.
+    /// Retrieves overall dashboard statistics.
+    /// Typically called on every dashboard load to populate summary widgets.
     /// </summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">Returns dashboard summary data.</response>
+    /// <response code="401">User is not authenticated.</response>
     [HttpGet("summary")]
     public async Task<ActionResult<Result<DashboardSummaryDto>>> GetSummary(
         CancellationToken ct)
@@ -29,9 +32,14 @@ public class DashboardController(IMediator mediator) : ControllerBase
     }
 
     /// <summary>
-    /// Paginated domain rows for the domains table.
-    /// Default page size 10 — enough for the dashboard view.
+    /// Retrieves paginated list of domains for the dashboard table.
+    /// Default page size is 10 to match dashboard UI layout.
     /// </summary>
+    /// <param name="page">Page number (starts at 1).</param>
+    /// <param name="pageSize">Number of items per page (default is 10).</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">Returns paginated domain list.</response>
+    /// <response code="401">User is not authenticated.</response>
     [HttpGet("domains")]
     public async Task<ActionResult<Result<PagedResult<DashboardDomainRowDto>>>> GetDomains(
         [FromQuery] int page     = 1,
@@ -44,9 +52,13 @@ public class DashboardController(IMediator mediator) : ControllerBase
     }
 
     /// <summary>
-    /// Recent alerts across all domains — newest first.
-    /// Default limit 10 for the dashboard feed.
+    /// Retrieves recent alerts across all domains.
+    /// Results are ordered from newest to oldest.
     /// </summary>
+    /// <param name="limit">Maximum number of alerts to return (default is 10).</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">Returns list of recent alerts.</response>
+    /// <response code="401">User is not authenticated.</response>
     [HttpGet("alerts")]
     public async Task<ActionResult<Result<IReadOnlyList<DashboardAlertDto>>>> GetAlerts(
         [FromQuery] int limit = 10,
