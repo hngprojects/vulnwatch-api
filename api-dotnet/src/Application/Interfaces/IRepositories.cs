@@ -56,7 +56,7 @@ public interface IDomainSettingsRepository
 
     // Used by the worker — fetch all domains due for a scan right now
     Task<List<DomainSettings>> GetDueForScan(
-        DateTime asOf, CancellationToken ct);
+        DateTime asOf, int limit, CancellationToken ct);
 
     Task<bool> ExistsForDomain(Guid domainId, CancellationToken ct);
 }
