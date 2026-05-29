@@ -6,6 +6,8 @@ using System.Text.Json.Serialization;
 using Application.Features.Integrations.Slack.DTOs;
 using Application.Interfaces;
 using Domain.Common;
+using Domain.Entities;
+using Domain.Meta;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -14,37 +16,33 @@ namespace Infrastructure.Services;
 public sealed class SlackService(
     IHttpClientFactory httpClientFactory,
     IConfiguration config,
+    ITokenService tokenProtector,
     ILogger<SlackService> logger) : ISlackService
 {
-    public async Task<Result<SlackToken>> ExchangeCode(
-        string code, CancellationToken ct)
+    public async Task<Result<SlackToken>> ExchangeCode(string code, CancellationToken ct)
     {
-        var clientId = config["Slack:ClientId"]!;
+        var clientId     = config["Slack:ClientId"]!;
         var clientSecret = config["Slack:ClientSecret"]!;
-        var redirectUri = config["Slack:RedirectUri"]!;
+        var redirectUri  = config["Slack:RedirectUri"]!;
 
-        using var http = new HttpClient();
+        var http = httpClientFactory.CreateClient("slack");
 
         var response = await http.PostAsync(
             "https://slack.com/api/oauth.v2.access",
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["client_id"] = clientId,
+                ["client_id"]     = clientId,
                 ["client_secret"] = clientSecret,
-                ["code"] = code,
-                ["redirect_uri"] = redirectUri,
+                ["code"]          = code,
+                ["redirect_uri"]  = redirectUri,
             }),
             ct);
 
         var rawBody = await response.Content.ReadAsStringAsync(ct);
 
-        // // Log the full raw response before any processing
-        // logger.LogInformation("[Slack OAuth] Raw token exchange response: {Body}", rawBody);
-
         if (!response.IsSuccessStatusCode)
         {
-            // logger.LogWarning("Slack token exchange HTTP error: {Status}",
-            //     response.StatusCode);
+            logger.LogWarning("Slack token exchange HTTP error: {Status}", response.StatusCode);
             return Result<SlackToken>.Failure(Error.Internal($"HTTP {response.StatusCode}"));
         }
 
@@ -55,44 +53,87 @@ public sealed class SlackService(
         }
         catch (JsonException ex)
         {
-            logger.LogError(ex, "Failed to deserialize Slack OAuth response — RawBody: {Body}", rawBody);
-            throw;
+            logger.LogError(ex, "Slack OAuth response was not valid JSON — RawBody: {Body}", rawBody);
+            return Result<SlackToken>.Failure(Error.Internal("Slack returned an unparseable response."));
         }
 
-        var ok = json.GetProperty("ok").GetBoolean();
-
-        if (!ok)
+        if (!json.TryGetProperty("ok", out var okProp) || !okProp.GetBoolean())
         {
-            var error = json.TryGetProperty("error", out var e) ? e.GetString() : "unknown";
-
-            return Result<SlackToken>.Failure(Error.Internal($"Slack OAuth failed: {error}"));
+            var slackError = json.TryGetProperty("error", out var e) ? e.GetString() : "unknown";
+            logger.LogWarning("Slack OAuth returned ok=false: {Error}", slackError);
+            return Result<SlackToken>.Failure(Error.Internal($"Slack OAuth failed: {slackError}"));
         }
 
-        var team = json.GetProperty("team");
-        var webhook = json.GetProperty("incoming_webhook");
-        var authedUser = json.GetProperty("authed_user");
+        var missing = new List<string>();
+
+        string? appId       = GetString(json, "app_id",       missing);
+        string? scope       = GetString(json, "scope",        missing);
+        string? tokenType   = GetString(json, "token_type",   missing);
+        string? accessToken = GetString(json, "access_token", missing);
+        string? botUserId   = GetString(json, "bot_user_id",  missing);
+
+        bool isEnterpriseInstall = json.TryGetProperty("is_enterprise_install", out var entProp)
+            && entProp.GetBoolean();
+
+        string? teamId   = null;
+        string? teamName = null;
+        if (json.TryGetProperty("team", out var team))
+        {
+            teamId   = GetString(team, "id",   missing, prefix: "team.");
+            teamName = GetString(team, "name", missing, prefix: "team.");
+        }
+        else
+        {
+            missing.Add("team");
+        }
+
+        string? authedUserId = null;
+        if (json.TryGetProperty("authed_user", out var authedUser))
+        {
+            authedUserId = GetString(authedUser, "id", missing, prefix: "authed_user.");
+        }
+        else
+        {
+            missing.Add("authed_user");
+        }
+
+        SlackIncomingWebhook? incomingWebhook = null;
+        if (json.TryGetProperty("incoming_webhook", out var webhook))
+        {
+            var whMissing = new List<string>();
+            string? channel          = GetString(webhook, "channel",           whMissing, prefix: "incoming_webhook.");
+            string? channelId        = GetString(webhook, "channel_id",        whMissing, prefix: "incoming_webhook.");
+            string? configurationUrl = GetString(webhook, "configuration_url", whMissing, prefix: "incoming_webhook.");
+            string? url              = GetString(webhook, "url",               whMissing, prefix: "incoming_webhook.");
+
+            if (whMissing.Count > 0)
+                missing.AddRange(whMissing);
+            else
+                incomingWebhook = new SlackIncomingWebhook(channel!, channelId!, configurationUrl!, url!);
+        }
+
+        if (missing.Count > 0)
+        {
+            logger.LogWarning(
+                "Slack OAuth response missing required fields: {Fields} — RawBody: {Body}",
+                string.Join(", ", missing), rawBody);
+            return Result<SlackToken>.Failure(
+                Error.Internal($"Slack response missing fields: {string.Join(", ", missing)}"));
+        }
 
         return Result<SlackToken>.Success(
-                    SlackToken.Success(
-            json.GetProperty("app_id").GetString()!,
-            new SlackAuthedUser(authedUser.GetProperty("id").GetString()!),
-            json.GetProperty("scope").GetString()!,
-            json.GetProperty("token_type").GetString()!,
-            json.GetProperty("access_token").GetString()!,
-            json.GetProperty("bot_user_id").GetString()!,
-            new SlackTeam(
-                team.GetProperty("id").GetString()!,
-                team.GetProperty("name").GetString()!
-            ),
-            json.GetProperty("is_enterprise_install").GetBoolean(),
-            new SlackIncomingWebhook(
-                Channel: webhook.GetProperty("channel").GetString()!,
-                ChannelId: webhook.GetProperty("channel_id").GetString()!,
-                ConfigurationUrl: webhook.GetProperty("configuration_url").GetString()!,
-                Url: webhook.GetProperty("url").GetString()!
-            )
-        ));
+            SlackToken.Success(
+                appId!,
+                new SlackAuthedUser(authedUserId!),
+                scope!,
+                tokenType!,
+                accessToken!,
+                botUserId!,
+                new SlackTeam(teamId!, teamName!),
+                isEnterpriseInstall,
+                incomingWebhook!));
     }
+
     public async Task SendMessage(
         string botToken, string channelId, string text,
         object? blocks = null, CancellationToken ct = default)
@@ -146,6 +187,31 @@ public sealed class SlackService(
 
         var response = await client.PostAsync(webhookUrl, content, ct);
         response.EnsureSuccessStatusCode();
+    }
+
+    private static string? GetString(
+        JsonElement element,
+        string propertyName,
+        List<string> missing,
+        string prefix = "")
+    {
+        if (element.TryGetProperty(propertyName, out var prop))
+        {
+            var value = prop.GetString();
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+
+        missing.Add($"{prefix}{propertyName}");
+        return null;
+    }
+
+    private string ResolveToken(Integration integration)
+    {
+        var raw = integration.Metadata.TryGetValue(SlackMetadataKeys.BotAccessToken, out var v)
+            ? v : throw new InvalidOperationException("Slack bot token not found in integration metadata.");
+
+        return tokenProtector.Unprotect(raw);
     }
 
 }

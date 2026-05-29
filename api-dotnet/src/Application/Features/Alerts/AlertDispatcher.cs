@@ -87,17 +87,6 @@ public class AlertDispatcher
 
         var deduplicationKey = e.ScanId.ToString();
 
-        var hasCritical = e.FindingSeverities.Any(s => s == FindingSeverity.Critical);
-        var severity = hasCritical ? AlertSeverity.Critical : AlertSeverity.Info;
-        var subject = hasCritical
-            ? $"Critical findings detected on {e.DomainName} — score {e.SecurityScore}"
-            : $"Scan completed for {e.DomainName} — score {e.SecurityScore}";
-
-        var body = $"Scan completed for {e.DomainName}. " +
-                   $"Security score: {e.SecurityScore}. " +
-                   $"Findings: {e.FindingSeverities.Count} " +
-                   $"({e.FindingSeverities.Count(s => s == FindingSeverity.Critical)} critical).";
-
         foreach (var channel in channels)
         {
             var alreadyExists = await _alerts.ExistsForToday(
@@ -113,18 +102,15 @@ public class AlertDispatcher
 
             var alert = ScanCompletedAlertFactory.Create(e, channel);
 
-            // var alert = Alert.Create(
-            //     userId: e.UserId,
-            //     type: AlertType.ScanCompleted,
-            //     channel: channel,
-            //     severity: severity,
-            //     deduplicationKey: deduplicationKey,
-            //     subject: subject,
-            //     body: body,
-            //     domainId: e.DomainId);
-
             await _alerts.AddAsync(alert, ct);
-            await _alerts.SaveChangesAsync(ct);
+            try
+            {
+                await _alerts.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+            {
+                _alerts.DetachUnsavedAlerts();
+            }
         }
     }
 

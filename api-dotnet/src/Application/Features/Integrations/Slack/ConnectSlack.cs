@@ -1,10 +1,10 @@
-using Application.Features.Integrations.Slack;
+using Application.Features.Integrations.Slack.DTOs;
 using Application.Interfaces;
 using Domain.Common;
 using MediatR;
 using Microsoft.Extensions.Configuration;
 
-namespace Application.Features.Integrations;
+namespace Application.Features.Integrations.Slack;
 
 public record ConnectSlackCommand : IRequest<Result<SlackAuthUrlResponse>>;
 
@@ -23,9 +23,6 @@ public class ConnectSlackHandler(
         var userId = currentUser.UserId;
         if (userId == Guid.Empty)
             return Result<SlackAuthUrlResponse>.Failure(Error.Unauthorized("Login to connect your slack account."));
-            
-        var state = Guid.NewGuid().ToString();
-        await stateStore.SaveSlackState(state, userId, ct);
 
         var clientId = config["Slack:ClientId"];
         var redirectUri = config["Slack:RedirectUri"];
@@ -34,6 +31,9 @@ public class ConnectSlackHandler(
         if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(redirectUri))
             return Result<SlackAuthUrlResponse>.Failure(
                 Error.Internal("Slack integration is not configured."));
+            
+        var state = Guid.NewGuid().ToString();
+        await stateStore.SaveSlackState(state, userId, ct);
 
         var authUrl =
             $"https://slack.com/oauth/v2/authorize?client_id={clientId}" +

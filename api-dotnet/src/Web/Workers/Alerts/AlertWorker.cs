@@ -59,7 +59,7 @@ public class AlertOutboxProcessor : BackgroundService
         var email        = scope.ServiceProvider.GetRequiredService<IEmailService>();
         var integrations    = scope.ServiceProvider.GetRequiredService<IIntegrationRepository>();
         var slackService = scope.ServiceProvider.GetRequiredService<ISlackService>();
-
+        var alertService = scope.ServiceProvider.GetRequiredService<IAlertService>();
         var pending = await alerts.GetPendingAsync(batchSize: BatchSize, ct);
 
         if (pending.Count == 0)
@@ -72,10 +72,10 @@ public class AlertOutboxProcessor : BackgroundService
                 switch (alert.Channel)
                 {
                     case AlertChannel.Email:
-                        await DeliverEmailAsync(scope, email, alert, ct);
+                        await alertService.DeliverEmailAsync(scope, alert, ct);
                         break;
                     case AlertChannel.Slack:
-                        await DeliverSlackAsync(integrations, slackService, alert, ct);
+                        await alertService.DeliverSlackAsync(alert, ct);
                         break;
                     default:
                         _logger.LogWarning(
@@ -95,140 +95,5 @@ public class AlertOutboxProcessor : BackgroundService
 
         await alerts.SaveChangesAsync(ct);
         return pending.Count;
-    }
-
-    private static async Task DeliverEmailAsync(
-        IServiceScope scope,
-        IEmailService email,
-        Alert alert,
-        CancellationToken ct)
-    {
-        var to = await ResolveEmail(scope, alert.UserId, ct);
-
-        await email.SendAsync(to, alert.Subject, alert.Body);
-        alert.MarkSent();
-    }
-
-    private static async Task DeliverSlackAsync(
-        IIntegrationRepository integrations,
-        ISlackService slackService,
-        Alert alert,
-        CancellationToken ct)
-    {
-        var integration = await integrations.GetByUserAndProvider(alert.UserId, IntegrationProvider.Slack, ct);
-
-        if (integration is null)
-        {
-            alert.MarkFailed("No active Slack integration.");
-            return;
-        }
-
-        var webhookUrl = integration.GetMetadata(SlackMetadataKeys.WebhookUrl);
-
-        if (string.IsNullOrWhiteSpace(webhookUrl))
-        {
-            alert.MarkFailed("Slack webhook URL not found.");
-            return;
-        }
-
-        await slackService.SendMessageViaWebhookUrl(webhookUrl, alert.Subject, BuildSlackBlocks(alert), ct);
-        alert.MarkSent();
-    }
-
-    private static object BuildSlackBlocks(Alert alert)
-    {
-        var completedAt = alert.CreatedAt.ToString("MMM d, yyyy 'at' HH:mm 'UTC'");
-
-        var blocks = new object[]
-        {
-            new
-            {
-                type = "section",
-                text = new
-                {
-                    type = "mrkdwn",
-                    text = "*Scan completed successfully*"
-                }
-            },
-
-            new
-            {
-                type = "divider"
-            },
-
-            // Main details
-            new
-            {
-                type = "section",
-                fields = new object[]
-                {
-                    new
-                    {
-                        type = "mrkdwn",
-                        text = $"`{alert.Subject}`"
-                    },
-                    new
-                    {
-                        type = "mrkdwn",
-                        text = $"*Status*\nCompleted"
-                    },
-                    new
-                    {
-                        type = "mrkdwn",
-                        text = $"*Scan Type*\nFull Security Scan"
-                    },
-                    new
-                    {
-                        type = "mrkdwn",
-                        text = $"*Completed At*\n{completedAt}"
-                    }
-                }
-            },
-
-            // Summary section
-            new
-            {
-                type = "section",
-                text = new
-                {
-                    type = "mrkdwn",
-                    text =
-                        "*Summary*\n" +
-                        "The scheduled vulnerability assessment finished successfully. " +
-                        "Review findings and remediation recommendations in the dashboard."
-                }
-            },
-
-            new
-            {
-                type = "divider"
-            },
-
-            // Footer context
-            new
-            {
-                type = "context",
-                elements = new object[]
-                {
-                    new
-                    {
-                        type = "mrkdwn",
-                        text = "VulnWatch Security Monitoring"
-                    }
-                }
-            }
-        };
-
-        return blocks;
-    }
-
-    private static async Task<string> ResolveEmail(
-        IServiceScope scope, Guid userId, CancellationToken ct)
-    {
-        var userManager = scope.ServiceProvider
-            .GetRequiredService<UserManager<User>>();
-        var user = await userManager.FindByIdAsync(userId.ToString());
-        return user?.Email ?? throw new InvalidOperationException(
-            $"No email for user {userId}");
     }
 }

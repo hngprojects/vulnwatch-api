@@ -1,6 +1,6 @@
 using Application.Features.Auth.DTOs;
-using Application.Features.Integrations;
 using Application.Features.Integrations.Slack;
+using Application.Features.Integrations.Slack.DTOs;
 using Domain.Common;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;

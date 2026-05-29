@@ -121,6 +121,7 @@ public class DomainIntelConsumer : BackgroundService
         var integrationsRepo = scope.ServiceProvider.GetRequiredService<IIntegrationRepository>();
         var slackService = scope.ServiceProvider.GetRequiredService<ISlackService>();
         var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+        var alertService = scope.ServiceProvider.GetRequiredService<IAlertService>();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
 
         var scan = await scanRepo.FindByIdWithFindings(scanId, ct);
@@ -144,7 +145,7 @@ public class DomainIntelConsumer : BackgroundService
             FindingSeverities: findingSeverities), ct);
 
         await FlushPendingAlertsAsync(
-            scope, alertRepo, emailService, integrationsRepo, slackService, userManager, userId, ct);
+            scope, alertRepo, alertService,userId, ct);
     }
 
     // Flush only this user's alerts immediately after a scan completes —
@@ -152,10 +153,7 @@ public class DomainIntelConsumer : BackgroundService
     private async Task FlushPendingAlertsAsync(
         IServiceScope scope,
         IAlertRepository alertRepo,
-        IEmailService emailService,
-        IIntegrationRepository integrationsRepo,
-        ISlackService slackService,
-        UserManager<User> userManager,
+        IAlertService alertService,
         Guid userId,
         CancellationToken ct)
     {
@@ -173,11 +171,11 @@ public class DomainIntelConsumer : BackgroundService
                 switch (alert.Channel)
                 {
                     case AlertChannel.Email:
-                        await DeliverEmail(scope, emailService, alert, ct);
+                        await alertService.DeliverEmailAsync(scope, alert, ct);
                         break;
 
                     case AlertChannel.Slack:
-                        await DeliverSlack(integrationsRepo, slackService, alert, ct);
+                        await alertService.DeliverSlackAsync(alert, ct);
                         break;
 
                     default:
@@ -195,151 +193,5 @@ public class DomainIntelConsumer : BackgroundService
         }
 
         await alertRepo.SaveChangesAsync(ct);
-    }
-
-    private async Task DeliverEmail(
-        IServiceScope scope,
-        IEmailService email,
-        Alert alert,
-        CancellationToken ct)
-    {
-        var to = await ResolveEmail(scope, alert.UserId, ct);
-
-        if (to is null)
-        {
-            alert.MarkFailed("User email not found.");
-            return;
-        }
-
-        await email.SendAsync(to, alert.Subject, alert.Body);
-        alert.MarkSent();
-    }
-
-    private async Task DeliverSlack(
-    IIntegrationRepository integrationsRepo,
-    ISlackService slackService,
-    Alert alert,
-    CancellationToken ct)
-    {
-        
-
-        var integration = await integrationsRepo.GetByUserAndProvider(
-            alert.UserId, IntegrationProvider.Slack, ct);
-
-
-        if (integration is null)
-        {
-            alert.MarkFailed("No active Slack integration.");
-            return;
-        }
-
-        var webhookUrl = integration.GetMetadata(SlackMetadataKeys.WebhookUrl);
-
-        if (string.IsNullOrWhiteSpace(webhookUrl))
-        {
-            alert.MarkFailed("Slack webhook URL not found.");
-            return;
-        }
-
-        await slackService.SendMessageViaWebhookUrl(webhookUrl, alert.Subject, BuildSlackBlocks(alert), ct);
-        alert.MarkSent();
-    }
-
-
-    private static object BuildSlackBlocks(Alert alert)
-    {
-        var completedAt = alert.CreatedAt.ToString("MMM d, yyyy 'at' HH:mm 'UTC'");
-
-        var blocks = new object[]
-        {
-            new
-            {
-                type = "section",
-                text = new
-                {
-                    type = "mrkdwn",
-                    text = "*Scan completed successfully*"
-                }
-            },
-
-            new
-            {
-                type = "divider"
-            },
-
-            // Main details
-            new
-            {
-                type = "section",
-                fields = new object[]
-                {
-                    new
-                    {
-                        type = "mrkdwn",
-                        text = $"`{alert.Subject}`"
-                    },
-                    new
-                    {
-                        type = "mrkdwn",
-                        text = $"*Status*\nCompleted"
-                    },
-                    new
-                    {
-                        type = "mrkdwn",
-                        text = $"*Scan Type*\nFull Security Scan"
-                    },
-                    new
-                    {
-                        type = "mrkdwn",
-                        text = $"*Completed At*\n{completedAt}"
-                    }
-                }
-            },
-
-            // Summary section
-            new
-            {
-                type = "section",
-                text = new
-                {
-                    type = "mrkdwn",
-                    text =
-                        "*Summary*\n" +
-                        "The scheduled vulnerability assessment finished successfully. " +
-                        "Review findings and remediation recommendations in the dashboard."
-                }
-            },
-
-            new
-            {
-                type = "divider"
-            },
-
-            // Footer context
-            new
-            {
-                type = "context",
-                elements = new object[]
-                {
-                    new
-                    {
-                        type = "mrkdwn",
-                        text = "VulnWatch Security Monitoring"
-                    }
-                }
-            }
-        };
-
-        return blocks;
-    }
-
-    private static async Task<string> ResolveEmail(
-        IServiceScope scope, Guid userId, CancellationToken ct)
-    {
-        var userManager = scope.ServiceProvider
-            .GetRequiredService<UserManager<User>>();
-        var user = await userManager.FindByIdAsync(userId.ToString());
-        return user?.Email ?? throw new InvalidOperationException(
-            $"No email for user {userId}");
     }
 }
