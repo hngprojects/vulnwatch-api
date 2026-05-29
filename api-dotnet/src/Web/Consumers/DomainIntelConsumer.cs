@@ -24,7 +24,7 @@ public record DomainIntel(
 
 public class DomainIntelConsumer : BackgroundService
 {
-    private const string Queue = "domain-intel";
+    private readonly string _queue;
     private readonly IConnectionMultiplexer _redis;
     private readonly IHubContext<ScanHub> _hub;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -34,17 +34,19 @@ public class DomainIntelConsumer : BackgroundService
         IConnectionMultiplexer redis,
         IHubContext<ScanHub> hub,
         IServiceScopeFactory scopeFactory,
+        IConfiguration config,
         ILogger<DomainIntelConsumer> logger)
     {
         _redis = redis;
         _hub = hub;
         _scopeFactory = scopeFactory;
+        _queue = config["Worker:DomainIntelQueue"] ?? "domain-intel";
         _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        _logger.LogInformation("DomainIntelConsumer listening on {Queue}", Queue);
+        _logger.LogInformation("DomainIntelConsumer listening on {Queue}", _queue);
         var db = _redis.GetDatabase();
 
         while (!ct.IsCancellationRequested)
@@ -52,7 +54,7 @@ public class DomainIntelConsumer : BackgroundService
             try
             {
                 // BLPOP equivalent — poll with timeout
-                var result = await db.ListRightPopAsync(Queue);
+                var result = await db.ListRightPopAsync(_queue);
 
                 if (result.IsNullOrEmpty)
                 {
