@@ -46,7 +46,7 @@ public class OWASPPersistence {
 
     private static final String UPDATE_SCAN_OWASP = """
             UPDATE "Scans"
-            SET "OWASPScore" = ?, "OWASPTier" = ?, "UpdatedAt" = NOW()
+            SET "OWASPScore" = ?, "OWASPTier" = ?, "SecurityScore" = ?, "UpdatedAt" = NOW()
             WHERE "Id" = ?
             """;
 
@@ -94,8 +94,11 @@ public class OWASPPersistence {
     }
 
     /**
-     * Updates just the scan-level score/tier columns. Split out from saveMapping()
-     * so it can be called again on its own once a previously-failed surface is
+     * Updates the scan-level score/tier columns — OWASPScore, OWASPTier, and
+     * SecurityScore (kept in sync with OWASPScore so the .NET read paths that
+     * still reference scan.SecurityScore, e.g. dashboards and completion
+     * alerts, don't see a stale/null value). Split out from saveMapping() so
+     * it can be called again on its own once a previously-failed surface is
      * replayed and the whole scan's score needs recalculating.
      */
     public void updateScanScore(String scanId, int overallScore, OWASPComplianceTier tier) {
@@ -103,6 +106,7 @@ public class OWASPPersistence {
                 UPDATE_SCAN_OWASP,
                 overallScore,
                 tier.getLabel(),
+                overallScore,
                 UUID.fromString(scanId)
         );
 
