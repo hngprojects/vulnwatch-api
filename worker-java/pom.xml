@@ -19,7 +19,10 @@
     <properties>
         <java.version>21</java.version>
         <netty.version>4.2.15.Final</netty.version>
-        <postgresql.version>42.7.11</postgresql.version>
+        <postgresql.version>42.7.12</postgresql.version>
+        <!-- Override Spring Boot's managed Jackson version so jackson-core picks up the fix for
+             GHSA-r7wm-3cxj-wff9 (Spring Boot's BOM otherwise pins jackson-core below the fix). -->
+        <jackson-bom.version>2.21.4</jackson-bom.version>
     </properties>
 
     <dependencyManagement>
